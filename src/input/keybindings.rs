@@ -61,7 +61,7 @@ impl KeyPattern {
 pub enum KeyAction {
     /// Dispatch an internal strongly typed Command
     Dispatch(Command),
-    /// Execute an external shell process (e.g. "foot", "rofi")
+    /// Execute an external shell process (e.g. "foot", "alacritty", "rofi")
     Spawn(String),
 }
 
@@ -88,7 +88,6 @@ impl Keybindings {
         let mut kb = Self::new();
 
         // XKB Keysym constants
-        // XK_Return = 0xff0d, XK_q = 0x0071, XK_c = 0x0063, XK_j = 0x006a, XK_k = 0x006b, XK_space = 0x0020
         const KEY_RETURN: u32 = 0xff0d;
         const KEY_Q: u32 = 0x0071;
         const KEY_J: u32 = 0x006a;
@@ -108,7 +107,6 @@ impl Keybindings {
             KeyAction::Dispatch(Command::CompositorQuit),
         );
 
-        // Super + Shift + C -> Close focused window (via client/command)
         // Super + j / k -> Focus Next / Prev
         kb.bind(
             KeyPattern::new(Modifiers::SUPER, KEY_J),
@@ -178,6 +176,7 @@ impl Keybindings {
                 std::process::Command::new("sh")
                     .arg("-c")
                     .arg(cmd)
+                    .env("WAYLAND_DISPLAY", "truss-0")
                     .spawn()
                     .map_err(|e| {
                         crate::dispatch::DispatchError::InvalidParams(format!(
