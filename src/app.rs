@@ -72,13 +72,16 @@ impl App {
         let lua_config = LuaConfig::new()
             .map_err(|e| std::io::Error::other(format!("Lua initialization failed: {e}")))?;
 
-        if let Some(config_path) = LuaConfig::find_default_config_path() {
-            info!("Loading configuration from {}", config_path.display());
-            let _ = lua_config.load_file(&config_path);
-        }
-
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
+
+        if let Some(config_path) = LuaConfig::find_default_config_path() {
+            info!("Loading configuration from {}", config_path.display());
+            if let Ok(()) = lua_config.load_file(&config_path) {
+                lua_config.apply_to_dispatcher(&mut dispatcher);
+            }
+        }
+
         let ipc = IpcServer::new("truss.sock")?;
         ipc.setup_broadcaster(&mut dispatcher);
 
@@ -115,6 +118,11 @@ impl App {
 
     pub fn is_running(&self) -> bool {
         !self.shutdown.load(Ordering::SeqCst)
+    }
+
+    /// Request clean shutdown
+    pub fn quit(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
     }
 
     /// Refresh layout calculations for active workspace and synchronize with Space elements.
