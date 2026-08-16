@@ -25,7 +25,7 @@
             libinput
             mesa
             udev
-            libseat
+            seatd
           ];
         };
       });
