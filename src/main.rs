@@ -1,14 +1,11 @@
-use std::{
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use smithay::{
     delegate_compositor,
     reexports::{
         calloop::{
             generic::Generic,
-            timer::{Timer, TimeoutAction},
+            timer::{TimeoutAction, Timer},
             EventLoop, Interest, Mode, PostAction,
         },
         wayland_server::Display,
@@ -99,8 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Generic::new(listener, Interest::READ, Mode::Level),
         move |_, listener, state: &mut App| {
             while let Some(stream) = listener.accept()? {
-                let client = listener_dh
-                    .insert_client(stream, Arc::new(ClientState::default()))?;
+                let client = listener_dh.insert_client(stream, Arc::new(ClientState::default()))?;
                 state.clients.push(client);
             }
             Ok(PostAction::Continue)
