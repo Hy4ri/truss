@@ -9,7 +9,7 @@ edition = "2021"
 mlua = { version = "0.10.3", features = ["luajit", "vendored", "serialize"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-smithay = { version = "0.7.0", default-features = false, features = ["backend_winit", "backend_egl", "renderer_gl", "desktop", "wayland_frontend", "wayland_data_device"] }
+smithay = { version = "0.7.0", default-features = false, features = ["backend_winit", "backend_egl", "renderer_gl", "desktop", "wayland_frontend", "wayland-protocols"] }
 thiserror = "2.0.20"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

@@ -1,11 +1,39 @@
+use std::os::unix::io::OwnedFd;
+
 use smithay::{
     delegate_data_device,
-    wayland::data_device::{
-        ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+    input::Seat,
+    wayland::selection::{
+        data_device::{
+            ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+        },
+        SelectionHandler, SelectionSource, SelectionTarget,
     },
 };
 
 use crate::App;
+
+impl SelectionHandler for App {
+    type SelectionUserData = ();
+
+    fn new_selection(
+        &mut self,
+        _ty: SelectionTarget,
+        _source: Option<SelectionSource>,
+        _seat: Seat<Self>,
+    ) {
+    }
+
+    fn send_selection(
+        &mut self,
+        _ty: SelectionTarget,
+        _mime_type: String,
+        _fd: OwnedFd,
+        _seat: Seat<Self>,
+        _user_data: &Self::SelectionUserData,
+    ) {
+    }
+}
 
 impl DataDeviceHandler for App {
     fn data_device_state(&self) -> &DataDeviceState {

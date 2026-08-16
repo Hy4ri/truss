@@ -11,7 +11,7 @@ use smithay::{
     reexports::wayland_server::Display,
     wayland::{
         compositor::CompositorState,
-        data_device::DataDeviceState,
+        selection::data_device::DataDeviceState,
         shell::xdg::{ToplevelSurface, XdgShellState},
         shm::ShmState,
     },
