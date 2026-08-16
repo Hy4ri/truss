@@ -7,7 +7,8 @@ use thiserror::Error;
 pub use command::{Command, Direction};
 pub use event::Event;
 
-use crate::state::{State, StateError};
+use crate::layout::{LayoutConfig, LayoutRegistry};
+use crate::state::{Rect, State, StateError};
 
 #[derive(Debug, Error, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DispatchError {
@@ -35,9 +36,11 @@ pub enum DispatchResult {
 
 pub type Subscriber = Box<dyn FnMut(&Event) + Send + 'static>;
 
-/// Central Command Dispatcher. Validates, executes commands against State, and broadcasts Events.
+/// Central Command Dispatcher. Validates, executes commands against State, applies Layout calculations, and broadcasts Events.
 pub struct Dispatcher {
     subscribers: Vec<Subscriber>,
+    pub layout_registry: LayoutRegistry,
+    pub layout_config: LayoutConfig,
 }
 
 impl Default for Dispatcher {
@@ -50,6 +53,8 @@ impl Dispatcher {
     pub fn new() -> Self {
         Self {
             subscribers: Vec::new(),
+            layout_registry: LayoutRegistry::new(),
+            layout_config: LayoutConfig::default(),
         }
     }
 
@@ -63,6 +68,40 @@ impl Dispatcher {
     pub fn broadcast(&mut self, event: &Event) {
         for sub in &mut self.subscribers {
             sub(event);
+        }
+    }
+
+    /// Recalculate geometries of all tiled windows on a given workspace within a usable display area.
+    pub fn recalculate_workspace_layout(
+        &self,
+        state: &mut State,
+        workspace_id: u32,
+        usable_area: Rect,
+    ) {
+        let (layout_name, window_ids) = match state.workspaces.get(&workspace_id) {
+            Some(ws) => (ws.layout.clone(), ws.windows.clone()),
+            None => return,
+        };
+
+        // Filter out floating/fullscreen windows if needed, or arrange all tiled
+        let tiled_windows: Vec<_> = window_ids
+            .into_iter()
+            .filter(|id| {
+                state
+                    .windows
+                    .get(id)
+                    .map(|w| !w.floating && !w.fullscreen)
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if let Some(layout) = self.layout_registry.get(&layout_name) {
+            let geometries = layout.arrange(&tiled_windows, usable_area, &self.layout_config);
+            for (win_id, rect) in geometries {
+                if let Some(w) = state.windows.get_mut(&win_id) {
+                    w.geometry = rect;
+                }
+            }
         }
     }
 
@@ -138,6 +177,25 @@ impl Dispatcher {
                 self.broadcast(&Event::LayoutChanged {
                     workspace_id: ws_id,
                     layout,
+                });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::LayoutSetGap { gap } => {
+                self.layout_config.gap = gap;
+                self.broadcast(&Event::LayoutConfigChanged {
+                    gap: Some(gap),
+                    master_ratio: None,
+                });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::LayoutSetRatio { ratio } => {
+                let clamped = ratio.clamp(0.1, 0.9);
+                self.layout_config.master_ratio = clamped;
+                self.broadcast(&Event::LayoutConfigChanged {
+                    gap: None,
+                    master_ratio: Some(clamped),
                 });
                 Ok(DispatchResult::Ok)
             }

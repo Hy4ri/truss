@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::state::WindowId;
 
 /// Observable events broadcasted to all subscribers (Lua, IPC clients, internal).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "event", content = "data")]
 pub enum Event {
     #[serde(rename = "workspace.switched")]
@@ -23,6 +23,12 @@ pub enum Event {
 
     #[serde(rename = "layout.changed")]
     LayoutChanged { workspace_id: u32, layout: String },
+
+    #[serde(rename = "layout.config_changed")]
+    LayoutConfigChanged {
+        gap: Option<u32>,
+        master_ratio: Option<f32>,
+    },
 
     #[serde(rename = "compositor.quitting")]
     CompositorQuitting,
