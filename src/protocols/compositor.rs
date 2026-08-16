@@ -3,9 +3,7 @@ use smithay::{
     delegate_compositor,
     wayland::{
         buffer::BufferHandler,
-        compositor::{
-            CompositorClientState, CompositorHandler, CompositorState,
-        },
+        compositor::{CompositorClientState, CompositorHandler, CompositorState},
     },
 };
 use tracing::trace;

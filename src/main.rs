@@ -11,11 +11,7 @@ use smithay::reexports::{
 use tracing::{info, warn};
 use wayland_server::ListeningSocket;
 
-use truss::{
-    dispatch::Command,
-    protocols::compositor::ClientState,
-    App,
-};
+use truss::{dispatch::Command, protocols::compositor::ClientState, App};
 
 const WAYLAND_SOCKET: &str = "truss-0";
 const ALIVE_SECONDS: u64 = 8;
@@ -45,8 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Generic::new(listener, Interest::READ, Mode::Level),
         move |_, listener, state: &mut App| {
             while let Some(stream) = listener.accept()? {
-                let client = listener_dh
-                    .insert_client(stream, Arc::new(ClientState::default()))?;
+                let client = listener_dh.insert_client(stream, Arc::new(ClientState::default()))?;
                 state.clients.push(client);
             }
             Ok(PostAction::Continue)

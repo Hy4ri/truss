@@ -11,11 +11,7 @@ use smithay::{
 };
 use tracing::{info, warn};
 
-use crate::{
-    dispatch::Event,
-    state::WindowId,
-    App,
-};
+use crate::{dispatch::Event, state::WindowId, App};
 
 impl XdgShellHandler for App {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
