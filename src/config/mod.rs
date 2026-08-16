@@ -1,5 +1,6 @@
 use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
+use tracing::info;
 
 use crate::dispatch::Command;
 
@@ -125,6 +126,18 @@ impl LuaConfig {
             }
         }
         None
+    }
+
+    /// Evaluates user config or loads fallback default settings.
+    pub fn apply_to_dispatcher(&self, dispatcher: &mut crate::dispatch::Dispatcher) {
+        if let Ok(gap) = self.lua.globals().get::<u32>("gap") {
+            dispatcher.layout_config.gap = gap;
+            info!("Applied gap from config: {gap}px");
+        }
+        if let Ok(ratio) = self.lua.globals().get::<f32>("master_ratio") {
+            dispatcher.layout_config.master_ratio = ratio.clamp(0.1, 0.9);
+            info!("Applied master_ratio from config: {ratio}");
+        }
     }
 
     /// Get evaluated global configuration value or fallback.

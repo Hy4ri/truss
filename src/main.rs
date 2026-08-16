@@ -11,10 +11,9 @@ use smithay::reexports::{
 use tracing::{info, warn};
 use wayland_server::ListeningSocket;
 
-use truss::{dispatch::Command, protocols::compositor::ClientState, App};
+use truss::{protocols::compositor::ClientState, App};
 
 const WAYLAND_SOCKET: &str = "truss-0";
-const ALIVE_SECONDS: u64 = 8;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -34,7 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let loop_handle = event_loop.handle();
 
     let listener = ListeningSocket::bind(WAYLAND_SOCKET)?;
-    info!("truss: wayland socket live at WAYLAND_DISPLAY={WAYLAND_SOCKET}");
+    info!("truss: wayland compositor running live at WAYLAND_DISPLAY={WAYLAND_SOCKET}");
+    info!("truss: ready for clients! Launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`");
 
     // Accept new wayland clients
     loop_handle.insert_source(
@@ -48,32 +48,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    // Periodic IPC poll & cleanup timer
+    // Periodic IPC poll & layout refresh
     loop_handle.insert_source(
         Timer::from_duration(Duration::from_millis(16)),
         move |_, _, state: &mut App| {
             state
                 .ipc
                 .poll_and_dispatch(&mut state.state, &mut state.dispatcher);
+            state.refresh_layout_and_space();
             TimeoutAction::ToDuration(Duration::from_millis(16))
-        },
-    )?;
-
-    // Clean shutdown after ALIVE_SECONDS (for test runs)
-    let signal = event_loop.get_signal();
-    loop_handle.insert_source(
-        Timer::from_duration(Duration::from_secs(ALIVE_SECONDS)),
-        move |_, _, state: &mut App| {
-            info!(
-                "truss: event loop alive for {ALIVE_SECONDS}s — active ws: {}, windows: {}",
-                state.state.active_workspace_id,
-                state.state.windows.len()
-            );
-            let _ = state
-                .dispatcher
-                .dispatch(&mut state.state, Command::CompositorQuit);
-            signal.stop();
-            TimeoutAction::Drop
         },
     )?;
 
@@ -83,6 +66,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         display.flush_clients()?;
     }
 
-    warn!("truss: shutting down");
+    warn!("truss: shutting down cleanly");
     Ok(())
 }
