@@ -1,6 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use smithay::{
+    input::{Seat, SeatState},
     reexports::wayland_server::Display,
     wayland::{
         compositor::CompositorState,
@@ -20,6 +21,8 @@ pub struct App {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
     pub shm_state: ShmState,
+    pub seat_state: SeatState<Self>,
+    pub seat: Seat<Self>,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, ToplevelSurface>,
     pub state: State,
@@ -35,6 +38,8 @@ impl App {
         let compositor_state = CompositorState::new::<Self>(&dh);
         let xdg_shell_state = XdgShellState::new::<Self>(&dh);
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
+        let mut seat_state = SeatState::new();
+        let seat = seat_state.new_wl_seat(&dh, "seat-0");
 
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
@@ -45,6 +50,8 @@ impl App {
             compositor_state,
             xdg_shell_state,
             shm_state,
+            seat_state,
+            seat,
             clients: Vec::new(),
             surfaces: HashMap::new(),
             state,

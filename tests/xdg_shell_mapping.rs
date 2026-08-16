@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use smithay::{reexports::wayland_server::Display, wayland::shell::xdg::XdgShellHandler};
-    use truss::{protocols::compositor::ClientState, state::State, App};
+    use smithay::reexports::wayland_server::Display;
+    use truss::App;
 
     #[test]
     fn test_app_initialization() {

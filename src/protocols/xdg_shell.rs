@@ -11,7 +11,7 @@ use smithay::{
 };
 use tracing::{info, warn};
 
-use crate::{dispatch::Event, state::WindowId, App};
+use crate::{dispatch::Event, App};
 
 impl XdgShellHandler for App {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -34,17 +34,19 @@ impl XdgShellHandler for App {
             }
         };
 
-        // Extract metadata if available
-        if let Some(app_id) = surface.app_id() {
-            if let Some(win) = self.state.windows.get_mut(&window_id) {
-                win.app_id = Some(app_id);
+        // Extract metadata if available through pending/current state
+        surface.with_pending_state(|state| {
+            if let Some(app_id) = &state.app_id {
+                if let Some(win) = self.state.windows.get_mut(&window_id) {
+                    win.app_id = Some(app_id.clone());
+                }
             }
-        }
-        if let Some(title) = surface.title() {
-            if let Some(win) = self.state.windows.get_mut(&window_id) {
-                win.title = Some(title);
+            if let Some(title) = &state.title {
+                if let Some(win) = self.state.windows.get_mut(&window_id) {
+                    win.title = Some(title.clone());
+                }
             }
-        }
+        });
 
         // Map window ID to toplevel surface
         self.surfaces.insert(window_id, surface);
