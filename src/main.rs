@@ -7,9 +7,9 @@ use smithay::{
     delegate_compositor,
     reexports::{
         calloop::{
-            generic::{Generic, Interest, Mode},
+            generic::Generic,
             timer::Timer,
-            EventLoop,
+            EventLoop, Interest, Mode,
         },
         wayland_server::Display,
     },
