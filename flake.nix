@@ -25,6 +25,7 @@
             libinput
             mesa
             libgbm
+            pixman
             udev
             seatd
           ];
