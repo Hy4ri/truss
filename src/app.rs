@@ -15,10 +15,12 @@ use smithay::{
         shm::ShmState,
     },
 };
+use tracing::info;
 use wayland_server::Client;
 
 use crate::{
     backend::{OutputManager, RenderManager},
+    config::LuaConfig,
     dispatch::Dispatcher,
     input::{Keybindings, PointerState},
     ipc::IpcServer,
@@ -37,6 +39,7 @@ pub struct App {
     pub keybindings: Keybindings,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
+    pub lua_config: LuaConfig,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, ToplevelSurface>,
     pub state: State,
@@ -66,6 +69,14 @@ impl App {
 
         let render_manager = RenderManager::new();
 
+        let lua_config = LuaConfig::new()
+            .map_err(|e| std::io::Error::other(format!("Lua initialization failed: {e}")))?;
+
+        if let Some(config_path) = LuaConfig::find_default_config_path() {
+            info!("Loading configuration from {}", config_path.display());
+            let _ = lua_config.load_file(&config_path);
+        }
+
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
         let ipc = IpcServer::new("truss.sock")?;
@@ -92,6 +103,7 @@ impl App {
             keybindings: Keybindings::new_default(),
             output_manager,
             render_manager,
+            lua_config,
             clients: Vec::new(),
             surfaces: HashMap::new(),
             state,

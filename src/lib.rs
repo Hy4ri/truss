@@ -1,5 +1,6 @@
 pub mod app;
 pub mod backend;
+pub mod config;
 pub mod dispatch;
 pub mod input;
 pub mod ipc;
@@ -9,6 +10,7 @@ pub mod state;
 
 pub use app::App;
 pub use backend::{OutputManager, RenderManager, DESKTOP_BG_COLOR};
+pub use config::LuaConfig;
 pub use dispatch::{Command, Direction, DispatchError, DispatchResult, Dispatcher, Event};
 pub use input::{KeyAction, KeyPattern, Keybindings, Modifiers, PointerFocusTarget, PointerState};
 pub use ipc::{IpcRequest, IpcResponse, IpcServer};
