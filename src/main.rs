@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut display: Display<App> = Display::new()?;
     let dh = display.handle();
-    let listener_dh = dh.clone();
+    let mut listener_dh = dh.clone();
 
     let compositor_state = CompositorState::new::<App>(&dh);
 
