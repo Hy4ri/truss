@@ -7,8 +7,8 @@ use smithay::{
     delegate_compositor,
     reexports::{
         calloop::{
-            generic::Generic,
-            timer::Timer,
+            generic::{Generic, PostAction},
+            timer::{Timer, TimeoutAction},
             EventLoop, Interest, Mode,
         },
         wayland_server::Display,
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .insert_client(stream, Arc::new(ClientState::default()))?;
                 state.clients.push(client);
             }
-            Ok(())
+            Ok(PostAction::Continue)
         },
     )?;
 
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             state.shutdown = true;
             signal.stop();
-            Ok(())
+            TimeoutAction::Drop
         },
     )?;
 
