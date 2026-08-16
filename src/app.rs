@@ -18,6 +18,7 @@ use smithay::{
 use wayland_server::Client;
 
 use crate::{
+    backend::{OutputManager, RenderManager},
     dispatch::Dispatcher,
     input::{Keybindings, PointerState},
     ipc::IpcServer,
@@ -34,6 +35,8 @@ pub struct App {
     pub pointer: Option<PointerHandle<Self>>,
     pub pointer_state: PointerState,
     pub keybindings: Keybindings,
+    pub output_manager: OutputManager,
+    pub render_manager: RenderManager,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, ToplevelSurface>,
     pub state: State,
@@ -57,6 +60,11 @@ impl App {
             .add_keyboard(XkbConfig::default(), 200, 25)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
         let pointer = seat.add_pointer();
+
+        let mut output_manager = OutputManager::new();
+        output_manager.create_default_output("HEADLESS-1", (1920, 1080).into());
+
+        let render_manager = RenderManager::new();
 
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
@@ -82,6 +90,8 @@ impl App {
             pointer: Some(pointer),
             pointer_state: PointerState::new(),
             keybindings: Keybindings::new_default(),
+            output_manager,
+            render_manager,
             clients: Vec::new(),
             surfaces: HashMap::new(),
             state,
@@ -93,5 +103,15 @@ impl App {
 
     pub fn is_running(&self) -> bool {
         !self.shutdown.load(Ordering::SeqCst)
+    }
+
+    /// Refresh layout calculations for active workspace and synchronize with Space elements.
+    pub fn refresh_layout_and_space(&mut self) {
+        let usable_area = self.output_manager.primary_usable_area();
+        let active_ws_id = self.state.active_workspace_id;
+        self.dispatcher
+            .recalculate_workspace_layout(&mut self.state, active_ws_id, usable_area);
+        self.render_manager
+            .sync_windows(&self.state, &self.surfaces);
     }
 }
