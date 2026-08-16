@@ -1,82 +1,19 @@
-pub mod dispatch;
-pub mod ipc;
-pub mod state;
-
 use std::{sync::Arc, time::Duration};
 
-use smithay::{
-    delegate_compositor,
-    reexports::{
-        calloop::{
-            generic::Generic,
-            timer::{TimeoutAction, Timer},
-            EventLoop, Interest, Mode, PostAction,
-        },
-        wayland_server::Display,
+use smithay::reexports::{
+    calloop::{
+        generic::Generic,
+        timer::{TimeoutAction, Timer},
+        EventLoop, Interest, Mode, PostAction,
     },
-    wayland::compositor::{CompositorClientState, CompositorHandler, CompositorState},
+    wayland_server::Display,
 };
 use tracing::{info, warn};
-use wayland_server::{
-    backend::{ClientData, ClientId, DisconnectReason},
-    protocol::wl_surface::WlSurface,
-    Client, ListeningSocket,
-};
+use wayland_server::ListeningSocket;
 
-use crate::{
-    dispatch::{Command, Dispatcher},
-    ipc::IpcServer,
-    state::State,
-};
-
-pub struct App {
-    pub compositor_state: CompositorState,
-    pub clients: Vec<Client>,
-    pub state: State,
-    pub dispatcher: Dispatcher,
-    pub ipc: IpcServer,
-    pub shutdown: bool,
-}
-
-impl AsMut<CompositorState> for App {
-    fn as_mut(&mut self) -> &mut CompositorState {
-        &mut self.compositor_state
-    }
-}
-
-impl CompositorHandler for App {
-    fn compositor_state(&mut self) -> &mut CompositorState {
-        &mut self.compositor_state
-    }
-
-    fn client_compositor_state<'a>(&self, client: &'a Client) -> &'a CompositorClientState {
-        &client.get_data::<ClientState>().unwrap().compositor_state
-    }
-
-    fn commit(&mut self, surface: &WlSurface) {
-        info!("surface committed: {:?}", surface);
-    }
-}
-
-delegate_compositor!(App);
-
-#[derive(Default)]
-struct ClientState {
-    compositor_state: CompositorClientState,
-}
-
-impl ClientData for ClientState {
-    fn initialized(&self, _client_id: ClientId) {
-        info!("client connected");
-    }
-
-    fn disconnected(&self, _client_id: ClientId, _reason: DisconnectReason) {
-        info!("client disconnected");
-    }
-}
+use truss::{dispatch::Command, protocols::compositor::ClientState, App};
 
 const WAYLAND_SOCKET: &str = "truss-0";
-const IPC_SOCKET: &str = "truss.sock";
 const ALIVE_SECONDS: u64 = 8;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,23 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let mut display: Display<App> = Display::new()?;
+    let mut app = App::new(&mut display)?;
+
     let dh = display.handle();
     let mut listener_dh = dh.clone();
-
-    let compositor_state = CompositorState::new::<App>(&dh);
-    let state = State::new();
-    let mut dispatcher = Dispatcher::new();
-    let ipc = IpcServer::new(IPC_SOCKET)?;
-    ipc.setup_broadcaster(&mut dispatcher);
-
-    let mut app = App {
-        compositor_state,
-        clients: Vec::new(),
-        state,
-        dispatcher,
-        ipc,
-        shutdown: false,
-    };
 
     let mut event_loop = EventLoop::<App>::try_new()?;
     let loop_handle = event_loop.handle();
