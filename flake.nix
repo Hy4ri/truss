@@ -24,6 +24,7 @@
             libxkbcommon
             libinput
             mesa
+            libgbm
             udev
             seatd
           ];
