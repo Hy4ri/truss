@@ -160,8 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     WinitEvent::CloseRequested => {
                         state.quit();
                     }
-                    WinitEvent::Redraw => {
-                        let _ = graphics_backend.bind();
+                    WinitEvent::Redraw if graphics_backend.bind().is_ok() => {
                         let _ = graphics_backend.submit(None);
                     }
                     _ => {}
