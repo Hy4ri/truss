@@ -9,7 +9,7 @@ pub mod protocols;
 pub mod state;
 
 pub use app::App;
-pub use backend::{OutputInfo, OutputManager, RenderManager, DESKTOP_BG_COLOR};
+pub use backend::{OutputInfo, OutputManager, RenderManager, TtyBackend, DESKTOP_BG_COLOR};
 pub use config::LuaConfig;
 pub use dispatch::{Command, Direction, DispatchError, DispatchResult, Dispatcher, Event};
 pub use input::{

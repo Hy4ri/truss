@@ -33,6 +33,7 @@ use tracing::{info, warn};
 use wayland_server::ListeningSocket;
 
 use truss::{
+    backend::TtyBackend,
     dispatch::Command,
     input::{Modifiers, PointerFocusTarget},
     protocols::compositor::ClientState,
@@ -85,12 +86,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
+    // Backend Selection: Winit (nested graphical) -> TTY (direct DRM/libseat/libinput) -> Headless
     let winit_init = winit::init::<GlesRenderer>();
 
     if let Ok((mut backend, winit_event_loop)) = winit_init {
-        info!(
-            "truss: initialized Winit host window backend (interactive input & rendering active)"
-        );
+        info!("truss: running on Winit host window backend (nested graphical mode)");
         let window_size = backend.window_size();
         let default_output = app
             .output_manager
@@ -189,7 +189,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         while app.is_running() {
-            // Render composited frame
             let size = backend.window_size();
             let damage = Rectangle::from_size(size);
             {
@@ -245,15 +244,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             display.flush_clients()?;
         }
     } else {
-        warn!("truss: running in headless/socket mode (winit host window not available)");
-        info!(
-            "truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`"
-        );
+        match TtyBackend::init(&loop_handle, &mut app) {
+            Ok(_tty_backend) => {
+                info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
+                info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`");
 
-        while app.is_running() {
-            event_loop.dispatch(Duration::from_millis(10), &mut app)?;
-            display.dispatch_clients(&mut app)?;
-            display.flush_clients()?;
+                while app.is_running() {
+                    event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+                    display.dispatch_clients(&mut app)?;
+                    display.flush_clients()?;
+                }
+            }
+            Err(err) => {
+                warn!("truss: TTY initialization skipped ({err}), falling back to headless socket mode");
+                info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`");
+
+                while app.is_running() {
+                    event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+                    display.dispatch_clients(&mut app)?;
+                    display.flush_clients()?;
+                }
+            }
         }
     }
 
