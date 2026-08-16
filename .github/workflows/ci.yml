@@ -28,6 +28,7 @@ jobs:
             libwayland-dev \
             libegl1-mesa-dev \
             libgbm-dev \
+            libpixman-1-dev \
             libxkbcommon-dev \
             libinput-dev \
             libudev-dev \
