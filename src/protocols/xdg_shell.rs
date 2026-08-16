@@ -5,8 +5,12 @@ use smithay::{
         wayland_server::protocol::wl_seat::WlSeat,
     },
     utils::Serial,
-    wayland::shell::xdg::{
-        PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+    wayland::{
+        compositor,
+        shell::xdg::{
+            PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
+            XdgToplevelSurfaceData,
+        },
     },
 };
 use tracing::{info, warn};
@@ -34,16 +38,14 @@ impl XdgShellHandler for App {
             }
         };
 
-        // Extract metadata if available through pending/current state
-        surface.with_pending_state(|state| {
-            if let Some(app_id) = &state.app_id {
-                if let Some(win) = self.state.windows.get_mut(&window_id) {
-                    win.app_id = Some(app_id.clone());
-                }
-            }
-            if let Some(title) = &state.title {
-                if let Some(win) = self.state.windows.get_mut(&window_id) {
-                    win.title = Some(title.clone());
+        // Extract metadata if available through compositor states
+        compositor::with_states(surface.wl_surface(), |states| {
+            if let Some(data) = states.data_map.get::<XdgToplevelSurfaceData>() {
+                if let Ok(guard) = data.lock() {
+                    if let Some(win) = self.state.windows.get_mut(&window_id) {
+                        win.app_id = guard.app_id.clone();
+                        win.title = guard.title.clone();
+                    }
                 }
             }
         });
@@ -60,6 +62,50 @@ impl XdgShellHandler for App {
             id: window_id,
             workspace_id: self.state.active_workspace_id,
         });
+    }
+
+    fn app_id_changed(&mut self, surface: ToplevelSurface) {
+        let mut target_id = None;
+        for (&id, s) in &self.surfaces {
+            if s.wl_surface() == surface.wl_surface() {
+                target_id = Some(id);
+                break;
+            }
+        }
+
+        if let Some(id) = target_id {
+            compositor::with_states(surface.wl_surface(), |states| {
+                if let Some(data) = states.data_map.get::<XdgToplevelSurfaceData>() {
+                    if let Ok(guard) = data.lock() {
+                        if let Some(win) = self.state.windows.get_mut(&id) {
+                            win.app_id = guard.app_id.clone();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    fn title_changed(&mut self, surface: ToplevelSurface) {
+        let mut target_id = None;
+        for (&id, s) in &self.surfaces {
+            if s.wl_surface() == surface.wl_surface() {
+                target_id = Some(id);
+                break;
+            }
+        }
+
+        if let Some(id) = target_id {
+            compositor::with_states(surface.wl_surface(), |states| {
+                if let Some(data) = states.data_map.get::<XdgToplevelSurfaceData>() {
+                    if let Ok(guard) = data.lock() {
+                        if let Some(win) = self.state.windows.get_mut(&id) {
+                            win.title = guard.title.clone();
+                        }
+                    }
+                }
+            });
+        }
     }
 
     fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {
