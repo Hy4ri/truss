@@ -24,7 +24,7 @@ use wayland_server::{
 };
 
 use crate::{
-    dispatch::{Command, DispatchResult, Dispatcher},
+    dispatch::{Command, Dispatcher},
     ipc::IpcServer,
     state::State,
 };

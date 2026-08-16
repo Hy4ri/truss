@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use truss::{
-        dispatch::{Command, Direction, DispatchResult, Dispatcher, Event},
-        state::{State, WindowId},
+        dispatch::{Command, DispatchResult, Dispatcher, Event},
+        state::State,
     };
     use std::sync::{Arc, Mutex};
 
