@@ -18,7 +18,6 @@
             rustfmt
             clippy
             pkg-config
-            # smithay build/runtime deps for later milestones (drm, egl, input)
             wayland
             wayland-protocols
             libxkbcommon
@@ -28,6 +27,29 @@
             pixman
             udev
             seatd
+            libx11
+            libxcursor
+            libxrandr
+            libxi
+            libglvnd
+            vulkan-loader
+          ];
+
+          LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [
+            wayland
+            libxkbcommon
+            libinput
+            mesa
+            libgbm
+            pixman
+            udev
+            seatd
+            libx11
+            libxcursor
+            libxrandr
+            libxi
+            libglvnd
+            vulkan-loader
           ];
         };
       });
