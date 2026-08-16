@@ -9,11 +9,28 @@ pub enum PointerFocusTarget {
     Background,
 }
 
-/// Tracks the pointer's logical coordinates and target under cursor.
+/// Active interactive drag operation (e.g. Super + Mouse drag).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PointerDragMode {
+    None,
+    Move {
+        window_id: WindowId,
+        start_pointer: Point<f64, Logical>,
+        initial_geom: Rect,
+    },
+    Resize {
+        window_id: WindowId,
+        start_pointer: Point<f64, Logical>,
+        initial_geom: Rect,
+    },
+}
+
+/// Tracks the pointer's logical coordinates, focus target, and active drag states.
 #[derive(Debug, Clone)]
 pub struct PointerState {
     pub location: Point<f64, Logical>,
     pub focus: PointerFocusTarget,
+    pub drag: PointerDragMode,
 }
 
 impl Default for PointerState {
@@ -27,6 +44,7 @@ impl PointerState {
         Self {
             location: Point::from((0.0, 0.0)),
             focus: PointerFocusTarget::Background,
+            drag: PointerDragMode::None,
         }
     }
 
@@ -35,7 +53,7 @@ impl PointerState {
         self.location = location;
     }
 
-    /// Update location by delta.
+    /// Update location by delta and clamp to bounding box.
     pub fn update_location(&mut self, delta: Point<f64, Logical>, bounds: Rect) {
         let new_x = (self.location.x + delta.x)
             .clamp(bounds.x as f64, (bounds.x + bounds.width as i32) as f64);
@@ -62,5 +80,61 @@ impl PointerState {
         }
 
         PointerFocusTarget::Background
+    }
+
+    /// Begin interactive move drag on target window.
+    pub fn start_drag_move(&mut self, window_id: WindowId, initial_geom: Rect) {
+        self.drag = PointerDragMode::Move {
+            window_id,
+            start_pointer: self.location,
+            initial_geom,
+        };
+    }
+
+    /// Begin interactive resize drag on target window.
+    pub fn start_drag_resize(&mut self, window_id: WindowId, initial_geom: Rect) {
+        self.drag = PointerDragMode::Resize {
+            window_id,
+            start_pointer: self.location,
+            initial_geom,
+        };
+    }
+
+    /// Update geometry of dragged window if drag mode is active.
+    pub fn update_drag(&self, state: &mut State) {
+        match &self.drag {
+            PointerDragMode::Move {
+                window_id,
+                start_pointer,
+                initial_geom,
+            } => {
+                if let Some(win) = state.windows.get_mut(window_id) {
+                    let dx = (self.location.x - start_pointer.x) as i32;
+                    let dy = (self.location.y - start_pointer.y) as i32;
+                    win.geometry.x = initial_geom.x + dx;
+                    win.geometry.y = initial_geom.y + dy;
+                    win.floating = true;
+                }
+            }
+            PointerDragMode::Resize {
+                window_id,
+                start_pointer,
+                initial_geom,
+            } => {
+                if let Some(win) = state.windows.get_mut(window_id) {
+                    let dx = (self.location.x - start_pointer.x) as i32;
+                    let dy = (self.location.y - start_pointer.y) as i32;
+                    win.geometry.width = (initial_geom.width as i32 + dx).max(100) as u32;
+                    win.geometry.height = (initial_geom.height as i32 + dy).max(100) as u32;
+                    win.floating = true;
+                }
+            }
+            PointerDragMode::None => {}
+        }
+    }
+
+    /// End active drag.
+    pub fn end_drag(&mut self) {
+        self.drag = PointerDragMode::None;
     }
 }
