@@ -1,3 +1,7 @@
+pub mod dispatch;
+pub mod ipc;
+pub mod state;
+
 use std::{sync::Arc, time::Duration};
 
 use smithay::{
@@ -19,10 +23,19 @@ use wayland_server::{
     Client, ListeningSocket,
 };
 
-struct App {
-    compositor_state: CompositorState,
-    clients: Vec<Client>,
-    shutdown: bool,
+use crate::{
+    dispatch::{Command, Dispatcher},
+    ipc::IpcServer,
+    state::State,
+};
+
+pub struct App {
+    pub compositor_state: CompositorState,
+    pub clients: Vec<Client>,
+    pub state: State,
+    pub dispatcher: Dispatcher,
+    pub ipc: IpcServer,
+    pub shutdown: bool,
 }
 
 impl AsMut<CompositorState> for App {
@@ -62,7 +75,8 @@ impl ClientData for ClientState {
     }
 }
 
-const SOCKET_NAME: &str = "truss-0";
+const WAYLAND_SOCKET: &str = "truss-0";
+const IPC_SOCKET: &str = "truss.sock";
 const ALIVE_SECONDS: u64 = 8;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,20 +92,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut listener_dh = dh.clone();
 
     let compositor_state = CompositorState::new::<App>(&dh);
+    let state = State::new();
+    let mut dispatcher = Dispatcher::new();
+    let ipc = IpcServer::new(IPC_SOCKET)?;
+    ipc.setup_broadcaster(&mut dispatcher);
 
-    let mut state = App {
+    let mut app = App {
         compositor_state,
         clients: Vec::new(),
+        state,
+        dispatcher,
+        ipc,
         shutdown: false,
     };
 
     let mut event_loop = EventLoop::<App>::try_new()?;
     let loop_handle = event_loop.handle();
 
-    let listener = ListeningSocket::bind(SOCKET_NAME)?;
-    info!("truss: wayland socket live at WAYLAND_DISPLAY={SOCKET_NAME}");
+    let listener = ListeningSocket::bind(WAYLAND_SOCKET)?;
+    info!("truss: wayland socket live at WAYLAND_DISPLAY={WAYLAND_SOCKET}");
 
-    // Accept new wayland clients.
+    // Accept new wayland clients
     loop_handle.insert_source(
         Generic::new(listener, Interest::READ, Mode::Level),
         move |_, listener, state: &mut App| {
@@ -103,24 +124,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    // Clean shutdown after ALIVE_SECONDS of verified liveness.
+    // Periodic IPC poll & cleanup timer
+    loop_handle.insert_source(
+        Timer::from_duration(Duration::from_millis(16)),
+        move |_, _, state: &mut App| {
+            state
+                .ipc
+                .poll_and_dispatch(&mut state.state, &mut state.dispatcher);
+            TimeoutAction::ToDuration(Duration::from_millis(16))
+        },
+    )?;
+
+    // Clean shutdown after ALIVE_SECONDS (for test runs)
     let signal = event_loop.get_signal();
     loop_handle.insert_source(
         Timer::from_duration(Duration::from_secs(ALIVE_SECONDS)),
         move |_, _, state: &mut App| {
             info!(
-                "truss: event loop alive for {ALIVE_SECONDS}s with {} client(s) — clean shutdown",
-                state.clients.len()
+                "truss: event loop alive for {ALIVE_SECONDS}s — active ws: {}, windows: {}",
+                state.state.active_workspace_id,
+                state.state.windows.len()
             );
+            let _ = state
+                .dispatcher
+                .dispatch(&mut state.state, Command::CompositorQuit);
             state.shutdown = true;
             signal.stop();
             TimeoutAction::Drop
         },
     )?;
 
-    while !state.shutdown {
-        event_loop.dispatch(Duration::from_millis(10), &mut state)?;
-        display.dispatch_clients(&mut state)?;
+    while !app.shutdown {
+        event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+        display.dispatch_clients(&mut app)?;
         display.flush_clients()?;
     }
 
