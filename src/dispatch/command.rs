@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::state::WindowId;
 
 /// Strongly typed commands that can be issued to the compositor.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "command", content = "params")]
 pub enum Command {
     #[serde(rename = "workspace.switch")]
@@ -26,6 +26,12 @@ pub enum Command {
 
     #[serde(rename = "layout.set")]
     LayoutSet { layout: String },
+
+    #[serde(rename = "layout.set_gap")]
+    LayoutSetGap { gap: u32 },
+
+    #[serde(rename = "layout.set_ratio")]
+    LayoutSetRatio { ratio: f32 },
 
     #[serde(rename = "state.get")]
     StateGet,
