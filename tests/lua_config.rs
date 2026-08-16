@@ -44,7 +44,11 @@ fn test_lua_event_hooks() {
         r#"
         last_focused = 0
         truss.on("window.focused", function(ev)
-            last_focused = ev.id
+            if ev.data and ev.data.id then
+                last_focused = ev.data.id
+            elseif ev.id then
+                last_focused = ev.id
+            end
         end)
     "#,
     )

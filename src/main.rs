@@ -2,7 +2,10 @@ use std::{sync::Arc, time::Duration};
 
 use smithay::{
     backend::{
-        input::{ButtonState, Event, InputEvent, KeyboardKeyEvent, PointerButtonEvent, PointerMotionAbsoluteEvent},
+        input::{
+            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyboardKeyEvent,
+            PointerButtonEvent,
+        },
         renderer::gles::GlesRenderer,
         winit::{self, WinitEvent},
     },
@@ -94,8 +97,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         logo: mods.logo,
                                     };
                                     let sym = handle.modified_sym().raw();
-                                    if let Some(action) =
-                                        data.keybindings.match_action(current_modifiers, sym).cloned()
+                                    if let Some(action) = data
+                                        .keybindings
+                                        .match_action(current_modifiers, sym)
+                                        .cloned()
                                     {
                                         let _ = data.keybindings.execute_action(
                                             &action,

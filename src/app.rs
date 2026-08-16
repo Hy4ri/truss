@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 
 use smithay::{
     input::{
@@ -22,7 +23,7 @@ use wayland_server::Client;
 use crate::{
     backend::{OutputManager, RenderManager},
     config::LuaConfig,
-    dispatch::Dispatcher,
+    dispatch::{Dispatcher, Event},
     input::{Keybindings, PointerState},
     ipc::IpcServer,
     state::{State, WindowId},
@@ -41,12 +42,13 @@ pub struct App {
     pub keybindings: Keybindings,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
-    pub lua_config: Arc<Mutex<LuaConfig>>,
+    pub lua_config: LuaConfig,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, ToplevelSurface>,
     pub state: State,
     pub dispatcher: Dispatcher,
     pub ipc: IpcServer,
+    pub event_rx: Receiver<Event>,
     pub shutdown: Arc<AtomicBool>,
 }
 
@@ -72,7 +74,7 @@ impl App {
 
         let render_manager = RenderManager::new();
 
-        let lua_instance = LuaConfig::new()
+        let lua_config = LuaConfig::new()
             .map_err(|e| std::io::Error::other(format!("Lua initialization failed: {e}")))?;
 
         let state = State::new();
@@ -80,17 +82,15 @@ impl App {
 
         if let Some(config_path) = LuaConfig::find_default_config_path() {
             info!("Loading configuration from {}", config_path.display());
-            if let Ok(()) = lua_instance.load_file(&config_path) {
-                lua_instance.apply_to_dispatcher(&mut dispatcher);
+            if let Ok(()) = lua_config.load_file(&config_path) {
+                lua_config.apply_to_dispatcher(&mut dispatcher);
             }
         }
-
-        let lua_config = Arc::new(Mutex::new(lua_instance));
-        let lua_for_events = lua_config.clone();
 
         let ipc = IpcServer::new("truss.sock")?;
         ipc.setup_broadcaster(&mut dispatcher);
 
+        let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel();
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_clone = shutdown.clone();
 
@@ -98,9 +98,7 @@ impl App {
             if let crate::dispatch::Event::CompositorQuitting = event {
                 shutdown_clone.store(true, Ordering::SeqCst);
             }
-            if let Ok(guard) = lua_for_events.lock() {
-                guard.handle_event(event);
-            }
+            let _ = event_tx.send(event.clone());
         });
 
         Ok(Self {
@@ -122,6 +120,7 @@ impl App {
             state,
             dispatcher,
             ipc,
+            event_rx,
             shutdown,
         })
     }
@@ -135,8 +134,16 @@ impl App {
         self.shutdown.store(true, Ordering::SeqCst);
     }
 
+    /// Process queued dispatcher events into Lua hooks
+    pub fn process_events(&mut self) {
+        while let Ok(event) = self.event_rx.try_recv() {
+            self.lua_config.handle_event(&event);
+        }
+    }
+
     /// Refresh layout calculations for active workspace and synchronize with Space elements.
     pub fn refresh_layout_and_space(&mut self) {
+        self.process_events();
         let usable_area = self.output_manager.primary_usable_area();
         let active_ws_id = self.state.active_workspace_id;
         self.dispatcher

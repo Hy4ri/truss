@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use mlua::{Lua, LuaSerdeExt};
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 use crate::dispatch::{Command, Event};
@@ -51,7 +51,7 @@ impl LuaConfig {
         let on_fn = self.lua.create_function(
             move |_, (event_name, callback): (String, mlua::Function)| {
                 let hooks: mlua::Table = lua_for_on.named_registry_value("_truss_hooks")?;
-                let list: mlua::Table = match hooks.get(&event_name)? {
+                let list: mlua::Table = match hooks.get(event_name.as_str())? {
                     mlua::Value::Table(t) => t,
                     _ => {
                         let t = lua_for_on.create_table()?;
@@ -131,11 +131,9 @@ impl LuaConfig {
         if let Ok(hooks) = self.lua.named_registry_value::<mlua::Table>("_truss_hooks") {
             if let Ok(mlua::Value::Table(list)) = hooks.get::<mlua::Value>(event_name) {
                 if let Ok(val) = self.lua.to_value(event) {
-                    for pair in list.sequence_values::<mlua::Function>() {
-                        if let Ok(func) = pair {
-                            if let Err(e) = func.call::<()>(val.clone()) {
-                                warn!("Lua callback error for {event_name}: {e}");
-                            }
+                    for func in list.sequence_values::<mlua::Function>().flatten() {
+                        if let Err(e) = func.call::<()>(val.clone()) {
+                            warn!("Lua callback error for {event_name}: {e}");
                         }
                     }
                 }
