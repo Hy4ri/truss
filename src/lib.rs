@@ -18,4 +18,7 @@ pub use input::{
 };
 pub use ipc::{IpcRequest, IpcResponse, IpcServer};
 pub use layout::{Layout, LayoutConfig, LayoutRegistry, MasterLayout, MonocleLayout};
-pub use state::{Rect, State, StateError, Window, WindowId, Workspace};
+pub use state::{
+    Rect, State, StateError, Window, WindowId, WindowRule, WindowRuleAction, WindowRuleManager,
+    WindowRuleMatcher, Workspace,
+};

@@ -1,8 +1,9 @@
 use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::dispatch::{Command, Event};
+use crate::state::{WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher};
 
 /// Lua Configuration Runtime environment for truss.
 pub struct LuaConfig {
@@ -31,6 +32,10 @@ impl LuaConfig {
         // Hooks table for event callbacks
         let hooks = self.lua.create_table()?;
         self.lua.set_named_registry_value("_truss_hooks", hooks)?;
+
+        // Rules table for window rules
+        let rules = self.lua.create_table()?;
+        self.lua.set_named_registry_value("_truss_rules", rules)?;
 
         // truss.version
         truss.set("version", env!("CARGO_PKG_VERSION"))?;
@@ -65,6 +70,21 @@ impl LuaConfig {
             },
         )?;
         truss.set("on", on_fn)?;
+
+        // Helper: truss.window_rule(name, rule_table)
+        let lua_for_rules = self.lua.clone();
+        let rule_fn =
+            self.lua
+                .create_function(move |_, (name, rule_table): (String, mlua::Table)| {
+                    let rules: mlua::Table = lua_for_rules.named_registry_value("_truss_rules")?;
+                    let len = rules.raw_len();
+                    let entry = lua_for_rules.create_table()?;
+                    entry.set("name", name)?;
+                    entry.set("rule", rule_table)?;
+                    rules.set(len + 1, entry)?;
+                    Ok(())
+                })?;
+        truss.set("window_rule", rule_fn)?;
 
         // Command constructors
         let cmd_table = self.lua.create_table()?;
@@ -113,6 +133,37 @@ impl LuaConfig {
         globals.set("truss", truss)?;
 
         Ok(())
+    }
+
+    /// Extract registered window rules into WindowRuleManager
+    pub fn apply_rules_to_manager(&self, manager: &mut WindowRuleManager) {
+        if let Ok(rules) = self.lua.named_registry_value::<mlua::Table>("_truss_rules") {
+            for entry in rules.sequence_values::<mlua::Table>().flatten() {
+                let name: String = entry.get("name").unwrap_or_else(|_| "unnamed".into());
+                if let Ok(rule_table) = entry.get::<mlua::Table>("rule") {
+                    let mut matcher = WindowRuleMatcher::default();
+                    if let Ok(app_id) = rule_table.get::<String>("app_id") {
+                        matcher.app_id = Some(app_id);
+                    }
+                    if let Ok(title) = rule_table.get::<String>("title") {
+                        matcher.title = Some(title);
+                    }
+
+                    let mut action = WindowRuleAction::default();
+                    if let Ok(floating) = rule_table.get::<bool>("floating") {
+                        action.open_floating = Some(floating);
+                    }
+                    if let Ok(ws) = rule_table.get::<u32>("workspace") {
+                        action.open_on_workspace = Some(ws);
+                    }
+                    if let Ok(fs) = rule_table.get::<bool>("fullscreen") {
+                        action.open_fullscreen = Some(fs);
+                    }
+
+                    manager.add_rule(WindowRule::new(name, matcher, action));
+                }
+            }
+        }
     }
 
     /// Dispatch an internal Event into registered Lua callbacks.
@@ -178,19 +229,12 @@ impl LuaConfig {
         None
     }
 
-    /// Evaluates user config or loads fallback default settings.
-    pub fn apply_to_dispatcher(&self, dispatcher: &mut crate::dispatch::Dispatcher) {
-        if let Ok(gap) = self.lua.globals().get::<u32>("gap") {
-            dispatcher.layout_config.gap = gap;
-            info!("Applied gap from config: {gap}px");
-        }
-        if let Ok(ratio) = self.lua.globals().get::<f32>("master_ratio") {
-            dispatcher.layout_config.master_ratio = ratio.clamp(0.1, 0.9);
-            info!("Applied master_ratio from config: {ratio}");
-        }
+    /// Apply custom configuration values to dispatcher.
+    pub fn apply_to_dispatcher(&self, _dispatcher: &mut crate::dispatch::Dispatcher) {
+        // Layout and gap rules configured via Lua
     }
 
-    /// Get evaluated global configuration value or fallback.
+    /// Retrieve a global string/value for testing/debugging.
     pub fn get_global<T: mlua::FromLua>(&self, name: &str) -> Result<T, mlua::Error> {
         self.lua.globals().get(name)
     }

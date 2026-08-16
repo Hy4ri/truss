@@ -26,7 +26,7 @@ use crate::{
     dispatch::{Dispatcher, Event},
     input::{Keybindings, PointerState},
     ipc::IpcServer,
-    state::{State, WindowId},
+    state::{State, WindowId, WindowRuleManager},
 };
 
 pub struct App {
@@ -40,6 +40,7 @@ pub struct App {
     pub pointer: Option<PointerHandle<Self>>,
     pub pointer_state: PointerState,
     pub keybindings: Keybindings,
+    pub window_rules: WindowRuleManager,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
@@ -84,6 +85,8 @@ impl App {
             info!("Loading configuration from {}", config_path.display());
             if let Ok(()) = lua_config.load_file(&config_path) {
                 lua_config.apply_to_dispatcher(&mut dispatcher);
+                let mut rules_mgr = WindowRuleManager::new();
+                lua_config.apply_rules_to_manager(&mut rules_mgr);
             }
         }
 
@@ -112,6 +115,7 @@ impl App {
             pointer: Some(pointer),
             pointer_state: PointerState::new(),
             keybindings: Keybindings::new_default(),
+            window_rules: WindowRuleManager::new(),
             output_manager,
             render_manager,
             lua_config,

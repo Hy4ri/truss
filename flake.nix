@@ -33,8 +33,10 @@
             libxi
             libglvnd
             vulkan-loader
+            egl-wayland
           ];
 
+          # Essential runtime environment for Intel, AMD, and NVIDIA GBM/EGL/Vulkan drivers
           LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [
             wayland
             libxkbcommon
@@ -50,7 +52,12 @@
             libxi
             libglvnd
             vulkan-loader
+            egl-wayland
           ];
+
+          # NVIDIA-specific Wayland / GBM fallback flags (compatible across Intel/AMD/Nvidia)
+          GBM_BACKENDS_PATH = "/run/opengl-driver/lib/gbm:/run/current-system/sw/lib/gbm";
+          __GLX_VENDOR_LIBRARY_NAME = "mesa";
         };
       });
     };

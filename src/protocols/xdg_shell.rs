@@ -53,6 +53,11 @@ impl XdgShellHandler for App {
         // Map window ID to toplevel surface
         self.surfaces.insert(window_id, surface);
 
+        // Evaluate and apply declarative window rules
+        if let Some(win) = self.state.windows.get_mut(&window_id) {
+            self.window_rules.evaluate_and_apply(win);
+        }
+
         info!(
             "xdg_toplevel mapped: {:?} on workspace {}",
             window_id, self.state.active_workspace_id
@@ -83,6 +88,9 @@ impl XdgShellHandler for App {
                     }
                 }
             });
+            if let Some(win) = self.state.windows.get_mut(&id) {
+                self.window_rules.evaluate_and_apply(win);
+            }
         }
     }
 
