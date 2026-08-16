@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use smithay::{
     input::{
@@ -41,7 +41,7 @@ pub struct App {
     pub keybindings: Keybindings,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
-    pub lua_config: LuaConfig,
+    pub lua_config: Arc<Mutex<LuaConfig>>,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, ToplevelSurface>,
     pub state: State,
@@ -72,7 +72,7 @@ impl App {
 
         let render_manager = RenderManager::new();
 
-        let lua_config = LuaConfig::new()
+        let lua_instance = LuaConfig::new()
             .map_err(|e| std::io::Error::other(format!("Lua initialization failed: {e}")))?;
 
         let state = State::new();
@@ -80,10 +80,13 @@ impl App {
 
         if let Some(config_path) = LuaConfig::find_default_config_path() {
             info!("Loading configuration from {}", config_path.display());
-            if let Ok(()) = lua_config.load_file(&config_path) {
-                lua_config.apply_to_dispatcher(&mut dispatcher);
+            if let Ok(()) = lua_instance.load_file(&config_path) {
+                lua_instance.apply_to_dispatcher(&mut dispatcher);
             }
         }
+
+        let lua_config = Arc::new(Mutex::new(lua_instance));
+        let lua_for_events = lua_config.clone();
 
         let ipc = IpcServer::new("truss.sock")?;
         ipc.setup_broadcaster(&mut dispatcher);
@@ -94,6 +97,9 @@ impl App {
         dispatcher.subscribe(move |event| {
             if let crate::dispatch::Event::CompositorQuitting = event {
                 shutdown_clone.store(true, Ordering::SeqCst);
+            }
+            if let Ok(guard) = lua_for_events.lock() {
+                guard.handle_event(event);
             }
         });
 

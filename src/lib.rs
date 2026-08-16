@@ -12,7 +12,10 @@ pub use app::App;
 pub use backend::{OutputInfo, OutputManager, RenderManager, DESKTOP_BG_COLOR};
 pub use config::LuaConfig;
 pub use dispatch::{Command, Direction, DispatchError, DispatchResult, Dispatcher, Event};
-pub use input::{KeyAction, KeyPattern, Keybindings, Modifiers, PointerFocusTarget, PointerState};
+pub use input::{
+    KeyAction, KeyPattern, Keybindings, Modifiers, PointerDragMode, PointerFocusTarget,
+    PointerState,
+};
 pub use ipc::{IpcRequest, IpcResponse, IpcServer};
 pub use layout::{Layout, LayoutConfig, LayoutRegistry, MasterLayout, MonocleLayout};
 pub use state::{Rect, State, StateError, Window, WindowId, Workspace};

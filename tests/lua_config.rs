@@ -1,4 +1,6 @@
 use truss::config::LuaConfig;
+use truss::dispatch::Event;
+use truss::state::WindowId;
 
 #[test]
 fn test_lua_config_initialization() {
@@ -33,6 +35,26 @@ fn test_lua_truss_api_and_commands() {
 
     let version: String = cfg.get_global("version").unwrap();
     assert!(!version.is_empty());
+}
+
+#[test]
+fn test_lua_event_hooks() {
+    let cfg = LuaConfig::new().expect("LuaConfig failed to initialize");
+    cfg.load_string(
+        r#"
+        last_focused = 0
+        truss.on("window.focused", function(ev)
+            last_focused = ev.id
+        end)
+    "#,
+    )
+    .expect("Failed to register on hook");
+
+    let event = Event::WindowFocused { id: WindowId(42) };
+    cfg.handle_event(&event);
+
+    let focused_id: u32 = cfg.get_global("last_focused").unwrap();
+    assert_eq!(focused_id, 42);
 }
 
 #[test]

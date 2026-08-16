@@ -1,7 +1,8 @@
 use smithay::utils::Point;
 use truss::dispatch::{Command, Direction, DispatchResult, Dispatcher};
 use truss::input::{
-    KeyAction, KeyPattern, Keybindings, Modifiers, PointerFocusTarget, PointerState,
+    KeyAction, KeyPattern, Keybindings, Modifiers, PointerDragMode, PointerFocusTarget,
+    PointerState,
 };
 use truss::state::{Rect, State};
 
@@ -108,4 +109,38 @@ fn test_pointer_find_window_target() {
         ptr.find_target_at_location(&state),
         PointerFocusTarget::Background
     );
+}
+
+#[test]
+fn test_pointer_interactive_drag_and_resize() {
+    let mut state = State::new();
+    let mut ptr = PointerState::new();
+
+    let w1 = state.create_window(Some(1)).unwrap();
+    state.windows.get_mut(&w1).unwrap().geometry = Rect::new(100, 100, 800, 600);
+
+    // Start move drag at (150, 150)
+    ptr.set_location(Point::from((150.0, 150.0)));
+    ptr.start_drag_move(w1, Rect::new(100, 100, 800, 600));
+
+    // Move pointer by +50, +30
+    ptr.set_location(Point::from((200.0, 180.0)));
+    ptr.update_drag(&mut state);
+
+    let moved_geom = state.windows.get(&w1).unwrap().geometry;
+    assert_eq!(moved_geom.x, 150);
+    assert_eq!(moved_geom.y, 130);
+    assert!(state.windows.get(&w1).unwrap().floating);
+
+    ptr.end_drag();
+    assert_eq!(ptr.drag, PointerDragMode::None);
+
+    // Start resize drag at (200, 180)
+    ptr.start_drag_resize(w1, state.windows.get(&w1).unwrap().geometry);
+    ptr.set_location(Point::from((250.0, 280.0)));
+    ptr.update_drag(&mut state);
+
+    let resized_geom = state.windows.get(&w1).unwrap().geometry;
+    assert_eq!(resized_geom.width, 850);
+    assert_eq!(resized_geom.height, 700);
 }

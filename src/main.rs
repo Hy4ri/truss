@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use smithay::{
     backend::{
-        input::{Event, InputEvent, KeyboardKeyEvent},
+        input::{ButtonState, Event, InputEvent, KeyboardKeyEvent, PointerButtonEvent, PointerMotionAbsoluteEvent},
         renderer::gles::GlesRenderer,
         winit::{self, WinitEvent},
     },
@@ -19,7 +19,12 @@ use smithay::{
 use tracing::{info, warn};
 use wayland_server::ListeningSocket;
 
-use truss::{input::Modifiers, protocols::compositor::ClientState, App};
+use truss::{
+    dispatch::Command,
+    input::{Modifiers, PointerFocusTarget},
+    protocols::compositor::ClientState,
+    App,
+};
 
 const WAYLAND_SOCKET: &str = "truss-0";
 
@@ -64,6 +69,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .create_default_output("WINIT-1", (window_size.w, window_size.h).into());
 
             let mut graphics_backend = backend;
+            let mut current_modifiers = Modifiers::NONE;
+
             loop_handle.insert_source(winit_event_loop, move |event, _, state: &mut App| {
                 match event {
                     WinitEvent::Input(InputEvent::Keyboard { event }) => {
@@ -80,7 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 serial,
                                 time,
                                 |data, mods, handle| {
-                                    let modifiers = Modifiers {
+                                    current_modifiers = Modifiers {
                                         ctrl: mods.ctrl,
                                         alt: mods.alt,
                                         shift: mods.shift,
@@ -88,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     };
                                     let sym = handle.modified_sym().raw();
                                     if let Some(action) =
-                                        data.keybindings.match_action(modifiers, sym).cloned()
+                                        data.keybindings.match_action(current_modifiers, sym).cloned()
                                     {
                                         let _ = data.keybindings.execute_action(
                                             &action,
@@ -101,6 +108,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 },
                             );
+                        }
+                    }
+                    WinitEvent::Input(InputEvent::PointerMotionAbsolute { event }) => {
+                        let output_area = state.output_manager.primary_usable_area();
+                        let (w, h) = (output_area.width as i32, output_area.height as i32);
+                        let pos = smithay::utils::Point::from((
+                            event.x_transformed(w),
+                            event.y_transformed(h),
+                        ));
+
+                        state.pointer_state.set_location(pos);
+                        state.pointer_state.update_drag(&mut state.state);
+                    }
+                    WinitEvent::Input(InputEvent::PointerButton { event }) => {
+                        let target = state.pointer_state.find_target_at_location(&state.state);
+                        let btn = event.button_code();
+                        let is_pressed = event.state() == ButtonState::Pressed;
+
+                        if is_pressed {
+                            if let PointerFocusTarget::Window(win_id) = target {
+                                if current_modifiers.logo {
+                                    if let Some(win) = state.state.windows.get(&win_id) {
+                                        let geom = win.geometry;
+                                        if btn == 0x110 {
+                                            // Super + Left Click: Interactive Move Drag
+                                            state.pointer_state.start_drag_move(win_id, geom);
+                                        } else if btn == 0x111 {
+                                            // Super + Right Click: Interactive Resize Drag
+                                            state.pointer_state.start_drag_resize(win_id, geom);
+                                        }
+                                    }
+                                } else {
+                                    // Normal Click: Focus Window
+                                    let _ = state.dispatcher.dispatch(
+                                        &mut state.state,
+                                        Command::WindowFocus { id: win_id },
+                                    );
+                                }
+                            }
+                        } else {
+                            // Release Button: End Drag
+                            state.pointer_state.end_drag();
                         }
                     }
                     WinitEvent::CloseRequested => {
@@ -122,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if winit_backend.is_some() {
-        info!("truss: Ready! Press Super+Enter inside the window to spawn your terminal (foot)");
+        info!("truss: Ready! Press Super+Enter inside the window to spawn terminal, or Super+Drag to move/resize");
     } else {
         info!(
             "truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`"

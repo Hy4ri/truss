@@ -1,8 +1,8 @@
-use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
-use tracing::info;
+use mlua::{Lua, LuaSerdeExt};
+use tracing::{info, warn};
 
-use crate::dispatch::Command;
+use crate::dispatch::{Command, Event};
 
 /// Lua Configuration Runtime environment for truss.
 pub struct LuaConfig {
@@ -28,6 +28,10 @@ impl LuaConfig {
         let globals = self.lua.globals();
         let truss = self.lua.create_table()?;
 
+        // Hooks table for event callbacks
+        let hooks = self.lua.create_table()?;
+        self.lua.set_named_registry_value("_truss_hooks", hooks)?;
+
         // truss.version
         truss.set("version", env!("CARGO_PKG_VERSION"))?;
 
@@ -41,6 +45,26 @@ impl LuaConfig {
             lua_clone.load(&content).set_name(&path_str).exec()
         })?;
         truss.set("source", source_fn)?;
+
+        // Helper: truss.on(event_name, callback)
+        let lua_for_on = self.lua.clone();
+        let on_fn = self.lua.create_function(
+            move |_, (event_name, callback): (String, mlua::Function)| {
+                let hooks: mlua::Table = lua_for_on.named_registry_value("_truss_hooks")?;
+                let list: mlua::Table = match hooks.get(&event_name)? {
+                    mlua::Value::Table(t) => t,
+                    _ => {
+                        let t = lua_for_on.create_table()?;
+                        hooks.set(event_name.clone(), t.clone())?;
+                        t
+                    }
+                };
+                let len = list.raw_len();
+                list.set(len + 1, callback)?;
+                Ok(())
+            },
+        )?;
+        truss.set("on", on_fn)?;
 
         // Command constructors
         let cmd_table = self.lua.create_table()?;
@@ -89,6 +113,34 @@ impl LuaConfig {
         globals.set("truss", truss)?;
 
         Ok(())
+    }
+
+    /// Dispatch an internal Event into registered Lua callbacks.
+    pub fn handle_event(&self, event: &Event) {
+        let event_name = match event {
+            Event::WorkspaceSwitched { .. } => "workspace.switched",
+            Event::WindowCreated { .. } => "window.created",
+            Event::WindowDestroyed { .. } => "window.destroyed",
+            Event::WindowFocused { .. } => "window.focused",
+            Event::WindowMovedWorkspace { .. } => "window.moved_workspace",
+            Event::LayoutChanged { .. } => "layout.changed",
+            Event::LayoutConfigChanged { .. } => "layout.config_changed",
+            Event::CompositorQuitting => "compositor.quitting",
+        };
+
+        if let Ok(hooks) = self.lua.named_registry_value::<mlua::Table>("_truss_hooks") {
+            if let Ok(mlua::Value::Table(list)) = hooks.get::<mlua::Value>(event_name) {
+                if let Ok(val) = self.lua.to_value(event) {
+                    for pair in list.sequence_values::<mlua::Function>() {
+                        if let Ok(func) = pair {
+                            if let Err(e) = func.call::<()>(val.clone()) {
+                                warn!("Lua callback error for {event_name}: {e}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Load and execute a Lua configuration string.
