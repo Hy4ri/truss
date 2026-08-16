@@ -72,13 +72,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = state
                 .dispatcher
                 .dispatch(&mut state.state, Command::CompositorQuit);
-            state.shutdown = true;
             signal.stop();
             TimeoutAction::Drop
         },
     )?;
 
-    while !app.shutdown {
+    while app.is_running() {
         event_loop.dispatch(Duration::from_millis(10), &mut app)?;
         display.dispatch_clients(&mut app)?;
         display.flush_clients()?;
