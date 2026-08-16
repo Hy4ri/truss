@@ -88,7 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         shutdown: false,
     };
 
-    let (mut event_loop, loop_handle) = EventLoop::<App>::try_new()?;
+    let mut event_loop = EventLoop::<App>::try_new()?;
+    let loop_handle = event_loop.handle();
 
     let listener = ListeningSocket::bind(SOCKET_NAME)?;
     info!("truss: wayland socket live at WAYLAND_DISPLAY={SOCKET_NAME}");
