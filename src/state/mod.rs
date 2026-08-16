@@ -1,8 +1,8 @@
 pub mod window;
 pub mod workspace;
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 pub use window::{Rect, Window, WindowId};

@@ -118,10 +118,9 @@ impl Dispatcher {
             } => {
                 let win_id = match window_id {
                     Some(id) => id,
-                    None => state
-                        .active_workspace()
-                        .focused_window
-                        .ok_or_else(|| DispatchError::InvalidParams("No focused window to move".into()))?,
+                    None => state.active_workspace().focused_window.ok_or_else(|| {
+                        DispatchError::InvalidParams("No focused window to move".into())
+                    })?,
                 };
 
                 state.move_window_to_workspace(win_id, workspace_id)?;

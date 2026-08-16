@@ -19,7 +19,10 @@ pub enum Command {
     WindowSwapMaster,
 
     #[serde(rename = "window.move_to_workspace")]
-    WindowMoveToWorkspace { window_id: Option<WindowId>, workspace_id: u32 },
+    WindowMoveToWorkspace {
+        window_id: Option<WindowId>,
+        workspace_id: u32,
+    },
 
     #[serde(rename = "layout.set")]
     LayoutSet { layout: String },

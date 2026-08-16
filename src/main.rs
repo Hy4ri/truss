@@ -117,8 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Generic::new(listener, Interest::READ, Mode::Level),
         move |_, listener, state: &mut App| {
             while let Some(stream) = listener.accept()? {
-                let client = listener_dh
-                    .insert_client(stream, Arc::new(ClientState::default()))?;
+                let client = listener_dh.insert_client(stream, Arc::new(ClientState::default()))?;
                 state.clients.push(client);
             }
             Ok(PostAction::Continue)
@@ -129,7 +128,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop_handle.insert_source(
         Timer::from_duration(Duration::from_millis(16)),
         move |_, _, state: &mut App| {
-            state.ipc.poll_and_dispatch(&mut state.state, &mut state.dispatcher);
+            state
+                .ipc
+                .poll_and_dispatch(&mut state.state, &mut state.dispatcher);
             TimeoutAction::ToDuration(Duration::from_millis(16))
         },
     )?;
@@ -144,7 +145,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 state.state.active_workspace_id,
                 state.state.windows.len()
             );
-            let _ = state.dispatcher.dispatch(&mut state.state, Command::CompositorQuit);
+            let _ = state
+                .dispatcher
+                .dispatch(&mut state.state, Command::CompositorQuit);
             state.shutdown = true;
             signal.stop();
             TimeoutAction::Drop

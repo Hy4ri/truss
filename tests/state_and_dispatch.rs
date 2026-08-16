@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
     use truss::{
         dispatch::{Command, DispatchResult, Dispatcher, Event},
         state::State,
     };
-    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_state_workspace_creation_and_switch() {
