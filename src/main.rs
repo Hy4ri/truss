@@ -266,10 +266,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else if try_tty {
         match TtyBackend::init(&loop_handle, &dh, &mut app) {
             Ok(_tty_backend) => {
-                info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
+                info!("truss: running directly on TTY (libseat + libinput active)");
                 info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+                info!(
+                    "truss: Press Ctrl+Alt+F1..F12 to switch VTs, or Super+Shift+Q to exit cleanly"
+                );
+
+                let start_time = std::time::Instant::now();
+                let default_output = app
+                    .output_manager
+                    .find_output_by_name("TTY-DRM-1")
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        app.output_manager
+                            .outputs
+                            .first()
+                            .cloned()
+                            .expect("No active output")
+                    });
 
                 while app.is_running() {
+                    let elapsed = start_time.elapsed();
+                    for surface in app.xdg_shell_state.toplevel_surfaces() {
+                        send_frames_surface_tree(
+                            surface.wl_surface(),
+                            &default_output,
+                            elapsed,
+                            None,
+                            |_, _| None,
+                        );
+                    }
+
                     event_loop.dispatch(Duration::from_millis(10), &mut app)?;
                     display.dispatch_clients(&mut app)?;
                     display.flush_clients()?;
