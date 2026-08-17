@@ -1,24 +1,28 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
-
 use smithay::{
+    desktop::layer_map_for_output,
     input::{
         keyboard::{KeyboardHandle, XkbConfig},
         pointer::PointerHandle,
         Seat, SeatState,
     },
-    reexports::wayland_server::Display,
+    reexports::wayland_server::{Client, Display},
     wayland::{
         compositor::CompositorState,
+        output::OutputManagerState,
         selection::data_device::DataDeviceState,
-        shell::xdg::{ToplevelSurface, XdgShellState},
+        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::ShmState,
     },
 };
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{channel, Receiver, Sender},
+        Arc,
+    },
+};
 use tracing::info;
-use wayland_server::Client;
 
 use crate::{
     backend::{OutputManager, RenderManager},
@@ -32,8 +36,10 @@ use crate::{
 pub struct App {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
+    pub layer_shell_state: WlrLayerShellState,
     pub shm_state: ShmState,
     pub data_device_state: DataDeviceState,
+    pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<Self>,
     pub seat: Seat<Self>,
     pub keyboard: Option<KeyboardHandle<Self>>,
@@ -45,7 +51,7 @@ pub struct App {
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
     pub clients: Vec<Client>,
-    pub surfaces: HashMap<WindowId, ToplevelSurface>,
+    pub surfaces: HashMap<WindowId, smithay::wayland::shell::xdg::ToplevelSurface>,
     pub state: State,
     pub dispatcher: Dispatcher,
     pub ipc: IpcServer,
@@ -59,8 +65,11 @@ impl App {
 
         let compositor_state = CompositorState::new::<Self>(&dh);
         let xdg_shell_state = XdgShellState::new::<Self>(&dh);
+        let layer_shell_state = WlrLayerShellState::new::<Self>(&dh);
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
         let data_device_state = DataDeviceState::new::<Self>(&dh);
+        let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
+
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat-0");
 
@@ -107,8 +116,10 @@ impl App {
         Ok(Self {
             compositor_state,
             xdg_shell_state,
+            layer_shell_state,
             shm_state,
             data_device_state,
+            output_manager_state,
             seat_state,
             seat,
             keyboard: Some(keyboard),
@@ -129,30 +140,25 @@ impl App {
         })
     }
 
+    /// Refresh and recalculate layouts for active workspaces across outputs.
+    pub fn refresh_layout_and_space(&mut self) {
+        let area = self.output_manager.primary_usable_area();
+        let active_ws = self.state.active_workspace_id;
+        self.dispatcher
+            .recalculate_workspace_layout(&mut self.state, active_ws, area);
+
+        // Update layer shell geometries for bars/panels
+        for output in &self.output_manager.outputs {
+            let mut layer_map = layer_map_for_output(output);
+            let _ = layer_map.arrange();
+        }
+    }
+
     pub fn is_running(&self) -> bool {
         !self.shutdown.load(Ordering::SeqCst)
     }
 
-    /// Request clean shutdown
     pub fn quit(&self) {
         self.shutdown.store(true, Ordering::SeqCst);
-    }
-
-    /// Process queued dispatcher events into Lua hooks
-    pub fn process_events(&mut self) {
-        while let Ok(event) = self.event_rx.try_recv() {
-            self.lua_config.handle_event(&event);
-        }
-    }
-
-    /// Refresh layout calculations for active workspace and synchronize with Space elements.
-    pub fn refresh_layout_and_space(&mut self) {
-        self.process_events();
-        let usable_area = self.output_manager.primary_usable_area();
-        let active_ws_id = self.state.active_workspace_id;
-        self.dispatcher
-            .recalculate_workspace_layout(&mut self.state, active_ws_id, usable_area);
-        self.render_manager
-            .sync_windows(&self.state, &self.surfaces);
     }
 }
