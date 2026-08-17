@@ -52,11 +52,20 @@ pub fn collect_render_elements(
 
     // 2. Normal Toplevel Windows & Popups
     for surface in app.xdg_shell_state.toplevel_surfaces() {
-        let win_geom = app
+        let win_entry = app
             .surfaces
             .iter()
             .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-            .and_then(|(id, _)| app.state.windows.get(id))
+            .and_then(|(id, _)| app.state.windows.get(id));
+
+        // Skip rendering windows belonging to inactive workspaces
+        if let Some(win) = win_entry {
+            if win.workspace_id != app.state.active_workspace_id {
+                continue;
+            }
+        }
+
+        let win_geom = win_entry
             .map(|w| (w.geometry.x, w.geometry.y))
             .unwrap_or((0, 0));
 

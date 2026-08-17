@@ -176,6 +176,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         &mut data.dispatcher,
                                         &mut data.state,
                                     );
+                                    let new_focus = data.state.active_workspace().focused_window;
+                                    data.set_focused_window(new_focus);
                                     FilterResult::Intercept(())
                                 } else {
                                     FilterResult::Forward
@@ -329,13 +331,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let elapsed = start_time.elapsed();
             for surface in app.xdg_shell_state.toplevel_surfaces() {
-                send_frames_surface_tree(
-                    surface.wl_surface(),
-                    &default_output,
-                    elapsed,
-                    None,
-                    |_, _| None,
-                );
+                let is_on_inactive_ws = app
+                    .surfaces
+                    .iter()
+                    .find(|(_, s)| s.wl_surface() == surface.wl_surface())
+                    .and_then(|(id, _)| app.state.windows.get(id))
+                    .map(|w| w.workspace_id != app.state.active_workspace_id)
+                    .unwrap_or(false);
+
+                if !is_on_inactive_ws {
+                    send_frames_surface_tree(
+                        surface.wl_surface(),
+                        &default_output,
+                        elapsed,
+                        None,
+                        |_, _| None,
+                    );
+                }
             }
 
             event_loop.dispatch(Duration::from_millis(5), &mut app)?;
@@ -366,13 +378,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Dispatch Wayland frame callbacks across active outputs
                     for output in &app.output_manager.outputs {
                         for surface in app.xdg_shell_state.toplevel_surfaces() {
-                            send_frames_surface_tree(
-                                surface.wl_surface(),
-                                output,
-                                elapsed,
-                                None,
-                                |_, _| None,
-                            );
+                            let is_on_inactive_ws = app
+                                .surfaces
+                                .iter()
+                                .find(|(_, s)| s.wl_surface() == surface.wl_surface())
+                                .and_then(|(id, _)| app.state.windows.get(id))
+                                .map(|w| w.workspace_id != app.state.active_workspace_id)
+                                .unwrap_or(false);
+
+                            if !is_on_inactive_ws {
+                                send_frames_surface_tree(
+                                    surface.wl_surface(),
+                                    output,
+                                    elapsed,
+                                    None,
+                                    |_, _| None,
+                                );
+                            }
                         }
                     }
 

@@ -1,9 +1,6 @@
 use smithay::{
     delegate_xdg_shell,
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_seat::WlSeat,
-    },
+    reexports::wayland_server::protocol::wl_seat::WlSeat,
     utils::Serial,
     wayland::{
         compositor,
@@ -23,12 +20,6 @@ impl XdgShellHandler for App {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        // Initial configure: tell client it is activated
-        surface.with_pending_state(|state| {
-            state.states.set(xdg_toplevel::State::Activated);
-        });
-        surface.send_configure();
-
         // Create window in pure state
         let window_id = match self.state.create_window(None) {
             Ok(id) => id,
@@ -58,7 +49,7 @@ impl XdgShellHandler for App {
             self.window_rules.evaluate_and_apply(win);
         }
 
-        // Focus new toplevel window by default
+        // Focus new toplevel window by default (this will recalculate layout & configure surfaces)
         self.set_focused_window(Some(window_id));
 
         info!(

@@ -103,6 +103,17 @@ impl Dispatcher {
                 }
             }
         }
+
+        // For fullscreen windows, assign the full usable display area
+        if let Some(ws) = state.workspaces.get(&workspace_id) {
+            for &win_id in &ws.windows {
+                if let Some(w) = state.windows.get_mut(&win_id) {
+                    if w.fullscreen {
+                        w.geometry = usable_area;
+                    }
+                }
+            }
+        }
     }
 
     /// Primary execution path: takes a command and mutable state, applies it atomically,

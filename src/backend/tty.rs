@@ -127,6 +127,8 @@ impl TtyBackend {
                                         &mut data.dispatcher,
                                         &mut data.state,
                                     );
+                                    let new_focus = data.state.active_workspace().focused_window;
+                                    data.set_focused_window(new_focus);
                                     FilterResult::Intercept(())
                                 } else {
                                     FilterResult::Forward
