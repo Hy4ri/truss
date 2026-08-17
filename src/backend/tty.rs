@@ -10,7 +10,7 @@ use smithay::{
     input::keyboard::FilterResult,
     reexports::{
         calloop::LoopHandle, input::Libinput,
-        wayland_server::backend::DisplayHandle,
+        wayland_server::DisplayHandle,
     },
 };
 use tracing::info;
