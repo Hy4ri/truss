@@ -151,6 +151,52 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
+            Command::WindowClose { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                let _ = state.remove_window(win_id);
+                self.broadcast(&Event::WindowDestroyed { id: win_id });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowToggleFloating { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                state.toggle_floating(win_id)?;
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowToggleFullscreen { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                state.toggle_fullscreen(win_id)?;
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::Spawn { command } => {
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&command)
+                    .env("WAYLAND_DISPLAY", "truss-0")
+                    .spawn();
+                Ok(DispatchResult::Ok)
+            }
+
             Command::WindowMoveToWorkspace {
                 window_id,
                 workspace_id,

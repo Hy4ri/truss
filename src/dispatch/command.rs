@@ -18,6 +18,15 @@ pub enum Command {
     #[serde(rename = "window.swap_master")]
     WindowSwapMaster,
 
+    #[serde(rename = "window.close")]
+    WindowClose { id: Option<WindowId> },
+
+    #[serde(rename = "window.toggle_floating")]
+    WindowToggleFloating { id: Option<WindowId> },
+
+    #[serde(rename = "window.toggle_fullscreen")]
+    WindowToggleFullscreen { id: Option<WindowId> },
+
     #[serde(rename = "window.move_to_workspace")]
     WindowMoveToWorkspace {
         window_id: Option<WindowId>,
@@ -32,6 +41,9 @@ pub enum Command {
 
     #[serde(rename = "layout.set_ratio")]
     LayoutSetRatio { ratio: f32 },
+
+    #[serde(rename = "spawn")]
+    Spawn { command: String },
 
     #[serde(rename = "state.get")]
     StateGet,

@@ -8,10 +8,12 @@ A minimal, efficient, keyboard-first dynamic tiling Wayland compositor built in 
 
 - **Pure State & Command Dispatcher**: Single source of truth in `src/state/` with an API-first command bus in `src/dispatch/`. Every action is atomic, validated, and broadcast.
 - **Dynamic Master+Stack & Monocle Tiling**: Automatic layout calculations in `src/layout/` with configurable gaps and master ratio.
-- **Universal JSONL IPC**: Control and query the compositor over `$XDG_RUNTIME_DIR/truss.sock` via newline-delimited JSON.
-- **Lua Configuration & Scripting**: Embedded LuaJIT (`mlua`) with modular file inclusion via `truss.source("path.lua")`, custom settings, and `truss.on("event", fn)` hook callbacks.
-- **Keyboard-First & Interactive Pointer**: Built-in keybinding engine (`Super+Return` terminal launcher, workspace switching) with interactive Mod-drag move & resize.
-- **Multi-Output & Desktop Compositing**: Smithay `Space` compositing pipeline with multi-monitor arrangement, fractional scale, and refresh rate tracking.
+- **Declarative Window Rules**: Match by `app_id` and `title` to automatically float windows (e.g. `pavucontrol`, `mpv`), pin to workspaces, or open fullscreen.
+- **Universal JSONL IPC & CLI**: Send commands via `truss msg <CMD>` or query full state over `$XDG_RUNTIME_DIR/truss.sock`.
+- **Live Status Bar Companion**: Built-in `truss bar` companion status line displaying workspaces, active window, layout, and clock.
+- **Lua Configuration & Autostart**: Embedded LuaJIT (`mlua`) with modular includes (`truss.source`), `truss.spawn_at_startup`, and reactive `truss.on("event", fn)` hooks.
+- **Bare-Metal TTY & Nested Support**: Runs inside existing Wayland/X11 desktops via Winit or directly from Linux TTY console using `libseat`, `libinput`, and DRM/KMS.
+- **Multi-GPU & Nvidia Ready**: Configured with `egl-wayland`, `GBM_BACKENDS_PATH`, and Mesa runtime libraries.
 
 ---
 
@@ -22,48 +24,53 @@ truss/
 ├── flake.nix               # Nix Flake providing Rust toolchain & Wayland/Smithay C dependencies
 ├── .envrc                  # direnv configuration (`use flake`)
 ├── Cargo.toml              # Dependencies: smithay 0.7, mlua (luajit), serde, calloop
+├── resources/
+│   └── config.default.lua  # Reference starter configuration template
 └── src/
-    ├── main.rs             # Bootloader: Wayland socket setup, Winit host loop & event pump
+    ├── main.rs             # Bootloader, launch flags, backend selection & main loop
     ├── lib.rs              # Public library exports
     ├── app.rs              # Compositor context: Seats, Protocols, Managers, Dispatcher
-    ├── state/              # Pure state model (Window, Workspace, State)
+    ├── cli.rs              # CLI flag parser & `truss msg` IPC command sender
+    ├── bar.rs              # Companion status bar client (`truss bar`)
+    ├── state/              # Pure state model, window rules engine (rules.rs)
     ├── dispatch/           # Command bus (Command, Event, Dispatcher)
     ├── layout/             # Pure arrange contract (MasterLayout, MonocleLayout, Registry)
     ├── input/              # Input subsystem (Keybindings, Modifiers, PointerState)
     ├── protocols/          # Protocol delegates (XDG Shell, SHM, Seat, Data Device)
-    ├── backend/            # OutputManager, Space RenderManager, display geometries
-    ├── config/             # LuaJIT runtime (LuaConfig, truss global table, on() hooks)
+    ├── backend/            # OutputManager, Space RenderManager, TtyBackend (libseat/libinput)
+    ├── config/             # LuaJIT runtime (LuaConfig, window_rule, spawn_at_startup)
     └── ipc/                # JSONL UNIX socket IPC server & broadcaster
 ```
 
 ---
 
-## Building & Running
+## CLI Launch Flags & Subcommands
 
-### Requirements
-- Rust 1.75+ (or stable)
-- Wayland dev libraries: `libwayland`, `libxkbcommon`, `libinput`, `libudev`, `libseat`, `libgbm`, `pixman`, `mesa/egl`
-
-### Using Nix (Recommended)
 ```bash
-# Enter dev shell with all C headers and toolchains configured
-nix develop
+# Launch compositor (auto-detects graphical host vs bare TTY)
+truss
 
-# Or with direnv
-direnv allow
+# Launch with custom config and socket
+truss -c ~/.config/truss/my-config.lua -s truss-1
 
-# Run test suite
-cargo test --all-features
+# Force a specific backend
+truss --backend winit    # Force nested window
+truss --backend tty      # Force direct DRM/libseat TTY
+truss --backend headless # Force headless socket mode
 
-# Build optimized release binary
-cargo build --release
+# Send IPC commands from terminal or scripts
+truss msg state-get
+truss msg workspace-switch 2
+truss msg close-window
+truss msg toggle-floating
+truss msg toggle-fullscreen
+truss msg layout-set monocle
+truss msg set-gap 16
+truss msg spawn "foot"
+
+# Launch the live companion status bar
+truss bar
 ```
-
-### Launching the Compositor
-```bash
-./target/release/truss
-```
-*Truss will create a Wayland display socket at `WAYLAND_DISPLAY=truss-0` and open an interactive graphical window.*
 
 ---
 
@@ -71,90 +78,36 @@ cargo build --release
 
 | Key Combo | Action | Description |
 | :--- | :--- | :--- |
-| `Super + Return` | `Spawn("foot")` | Launch terminal emulator inside `truss` |
+| `Super + Return` | `Spawn("foot")` | Launch terminal emulator |
+| `Super + D` | `Spawn("fuzzel")` | Launch application menu |
+| `Super + Q` | `WindowClose` | Close focused window |
 | `Super + Shift + Q` | `CompositorQuit` | Gracefully shut down compositor |
+| `Super + F` | `WindowToggleFullscreen` | Toggle fullscreen on focused window |
+| `Super + Shift + Space` | `WindowToggleFloating` | Toggle floating mode on focused window |
 | `Super + J` | `WindowFocusDir(Next)` | Focus next window in layout |
 | `Super + K` | `WindowFocusDir(Prev)` | Focus previous window in layout |
 | `Super + Space` | `WindowSwapMaster` | Swap currently focused window with master |
 | `Super + 1..9` | `WorkspaceSwitch(id)` | Switch active workspace (1 through 9) |
 | `Super + Shift + 1..9` | `WindowMoveToWorkspace`| Move focused window to workspace (1 through 9) |
-| `Super + Left Click Drag` | `PointerDragMove` | Interactively drag and move window (floats window) |
-| `Super + Right Click Drag`| `PointerDragResize`| Interactively drag and resize window (floats window)|
-| `Left Click` | `WindowFocus` | Focus window under pointer |
+| `Super + Left Drag` | `PointerDragMove` | Drag and move window (automatically floats) |
+| `Super + Right Drag` | `PointerDragResize` | Drag and resize window (automatically floats) |
 
 ---
 
 ## Lua Configuration
 
-Place your configuration in `~/.config/truss/config.lua` or `$XDG_CONFIG_HOME/truss/config.lua`:
+Place configuration at `~/.config/truss/config.lua`:
 
 ```lua
--- ~/.config/truss/config.lua
+-- Window Rules
+truss.window_rule("audio", { app_id = "pavucontrol", floating = true })
+truss.window_rule("media", { app_id = "mpv", floating = true })
 
--- Layout preferences
-gap = 12
-master_ratio = 0.55
+-- Autostart
+truss.spawn_at_startup("truss bar")
 
--- Modular inclusion
--- truss.source("~/.config/truss/keybinds.lua")
-
--- Event listeners
-truss.on("window.focused", function(ev)
-    -- print("Window focused:", ev.id)
-end)
-
-truss.on("workspace.switched", function(ev)
-    -- print("Switched to workspace:", ev.id)
+-- Event Hooks
+truss.on("workspace.switched", function(event)
+    -- print("Switched to workspace: " .. tostring(event.id))
 end)
 ```
-
----
-
-## JSONL IPC Socket
-
-Connect to `$XDG_RUNTIME_DIR/truss.sock` via UNIX domain socket:
-
-### 1. Send Commands
-```bash
-# Query complete state tree
-echo '{"command": "state.get"}' | nc -U $XDG_RUNTIME_DIR/truss.sock
-
-# Switch workspace
-echo '{"command": "workspace.switch", "params": {"id": 2}}' | nc -U $XDG_RUNTIME_DIR/truss.sock
-
-# Adjust layout gap
-echo '{"command": "layout.set_gap", "params": {"gap": 20}}' | nc -U $XDG_RUNTIME_DIR/truss.sock
-
-# Focus window
-echo '{"command": "window.focus", "params": {"id": 1}}' | nc -U $XDG_RUNTIME_DIR/truss.sock
-```
-
-### 2. Subscribe to Event Stream
-```bash
-# Subscribe to all compositor events
-echo '{"subscribe": "all"}' | nc -U $XDG_RUNTIME_DIR/truss.sock
-```
-*Outputs JSON events such as `window.created`, `window.focused`, `workspace.switched`, `layout.changed` in real-time.*
-
----
-
-## Testing & Quality Assurance
-
-Truss enforces zero-warning builds and 100% test pass rates across all subsystems:
-
-```bash
-# Check formatting
-cargo fmt --all -- --check
-
-# Check clippy warnings
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Run all 24 unit & integration test suites
-cargo test --all-features
-```
-
----
-
-## License
-
-MIT / Apache 2.0
