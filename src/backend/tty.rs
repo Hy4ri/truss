@@ -13,14 +13,16 @@ use smithay::{
 use tracing::info;
 
 use crate::{
+    backend::drm::{discover_and_init_drm_displays, DrmDisplay},
     dispatch::Command,
     input::{Modifiers, PointerFocusTarget},
     App,
 };
 
-/// TTY / Direct Bare-Metal Session Manager using libseat and libinput
+/// TTY / Direct Bare-Metal Session Manager using libseat, libinput, and DRM/KMS
 pub struct TtyBackend {
     pub session: LibSeatSession,
+    pub drm_displays: Vec<DrmDisplay>,
 }
 
 impl TtyBackend {
@@ -160,15 +162,32 @@ impl TtyBackend {
             },
         )?;
 
-        // Replace the phantom headless output with the real TTY output
-        app.output_manager.remove_output("HEADLESS-1");
-        // Ensure primary TTY output is registered AND advertised to clients
-        let _tty_output = app
-            .output_manager
-            .create_default_output("TTY-DRM-1", (1920, 1080).into());
-        let _tty_global = _tty_output.create_global::<App>(dh);
-        info!("truss: registered default physical display output 'TTY-DRM-1'");
+        // Initialize DRM/KMS hardware display scanout
+        let mut session_for_drm = session.clone();
+        let drm_displays =
+            discover_and_init_drm_displays(&mut session_for_drm, loop_handle, dh, app);
 
-        Ok(Self { session })
+        // Replace the phantom headless output
+        app.output_manager.remove_output("HEADLESS-1");
+
+        if drm_displays.is_empty() {
+            info!(
+                "truss: no DRM display hardware found, using fallback virtual output 'TTY-DRM-1'"
+            );
+            let _tty_output = app
+                .output_manager
+                .create_default_output("TTY-DRM-1", (1920, 1080).into());
+            let _tty_global = _tty_output.create_global::<App>(dh);
+        } else {
+            info!(
+                "truss: registered {} physical DRM display(s) to OutputManager",
+                drm_displays.len()
+            );
+        }
+
+        Ok(Self {
+            session,
+            drm_displays,
+        })
     }
 }
