@@ -122,13 +122,17 @@ impl OutputManager {
         Rect::new(min_x, min_y, (max_x - min_x) as u32, (max_y - min_y) as u32)
     }
 
-    /// Gets the primary output's usable geometry.
+    /// Gets the primary output's usable geometry (excluding panels/bars with exclusive zones).
     pub fn primary_usable_area(&self) -> Rect {
         if let Some(output) = self.outputs.first() {
-            let pos = output.current_location();
-            if let Some(mode) = output.current_mode() {
-                return Rect::new(pos.x, pos.y, mode.size.w as u32, mode.size.h as u32);
-            }
+            let layer_map = smithay::desktop::layer_map_for_output(output);
+            let non_exclusive = layer_map.non_exclusive_zone();
+            return Rect::new(
+                non_exclusive.loc.x,
+                non_exclusive.loc.y,
+                non_exclusive.size.w as u32,
+                non_exclusive.size.h as u32,
+            );
         }
         Rect::new(0, 0, 1920, 1080)
     }
