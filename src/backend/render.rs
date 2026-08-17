@@ -1,18 +1,31 @@
+use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
     render_elements_from_surface_tree, WaylandSurfaceRenderElement,
 };
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::layer_map_for_output;
+use smithay::input::pointer::CursorImageStatus;
+use smithay::render_elements;
 
+use crate::backend::cursor::CursorManager;
 use crate::App;
 
-/// Extract all render elements (layer-shell background, bottom, toplevel windows, top, overlay)
+// Unified render element enum that can hold both Wayland surface elements
+// and memory-buffer-backed cursor elements.
+render_elements! {
+    pub TrussRenderElement<=GlesRenderer>;
+    Surface=WaylandSurfaceRenderElement<GlesRenderer>,
+    Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
+}
+
+/// Extract all render elements (layer-shell background, bottom, toplevel windows, top, overlay, cursor)
 /// for rendering to the active output framebuffer in proper Wayland layer order.
 pub fn collect_render_elements(
     app: &App,
     renderer: &mut GlesRenderer,
-) -> Vec<WaylandSurfaceRenderElement<GlesRenderer>> {
+    cursor_manager: &mut CursorManager,
+) -> Vec<TrussRenderElement> {
     let mut elements = Vec::new();
 
     // 1. Layer Shell Surfaces: non-popup background/bottom layers
@@ -32,7 +45,7 @@ pub fn collect_render_elements(
                     1.0,
                     Kind::Unspecified,
                 );
-                elements.extend(layer_elements);
+                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
             }
         }
     }
@@ -55,7 +68,35 @@ pub fn collect_render_elements(
             1.0,
             Kind::Unspecified,
         );
-        elements.extend(win_elements);
+        elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
+    }
+
+    // 3. Cursor (rendered LAST = on top of everything)
+    let pointer_loc = app.pointer_state.location;
+    let cursor_pos = (pointer_loc.x as i32, pointer_loc.y as i32);
+
+    match &app.cursor_status {
+        CursorImageStatus::Hidden => {
+            // No cursor to render
+        }
+        CursorImageStatus::Surface(wl_surface) => {
+            // Client-provided cursor surface (e.g. text cursor, resize handles)
+            let cursor_elements = render_elements_from_surface_tree(
+                renderer,
+                wl_surface,
+                cursor_pos,
+                1.0,
+                1.0,
+                Kind::Cursor,
+            );
+            elements.extend(cursor_elements.into_iter().map(TrussRenderElement::Surface));
+        }
+        CursorImageStatus::Named(_icon) => {
+            // Use xcursor theme cursor or fallback
+            if let Some(cursor_element) = cursor_manager.render_named_cursor(renderer, cursor_pos) {
+                elements.push(TrussRenderElement::Cursor(cursor_element));
+            }
+        }
     }
 
     elements

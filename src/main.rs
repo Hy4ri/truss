@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use smithay::{
     backend::{
         input::{
-            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyboardKeyEvent,
+            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
             PointerButtonEvent,
         },
         renderer::{gles::GlesRenderer, utils::draw_render_elements, Color32F, Frame, Renderer},
@@ -142,6 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let start_time = std::time::Instant::now();
         let mut current_modifiers = Modifiers::NONE;
+        let mut cursor_manager = truss::backend::CursorManager::new();
 
         loop_handle.insert_source(
             winit_event_loop,
@@ -151,6 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let time = event.time_msec();
                     let key_code = event.key_code();
                     let key_state = event.state();
+                    let is_press = key_state == KeyState::Pressed;
 
                     if let Some(keyboard) = state.keyboard.clone() {
                         keyboard.input::<(), _>(
@@ -166,6 +168,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     shift: mods.shift,
                                     logo: mods.logo,
                                 };
+
+                                // Only match keybinds on key press, not release
+                                if !is_press {
+                                    return FilterResult::Forward;
+                                }
+
                                 let sym = handle.modified_sym().raw();
                                 let raw_sym =
                                     handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
@@ -240,7 +248,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let damage = Rectangle::from_size(size);
             {
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
-                    let elements = truss::backend::collect_render_elements(&app, renderer);
+                    let elements = truss::backend::collect_render_elements(
+                        &app,
+                        renderer,
+                        &mut cursor_manager,
+                    );
 
                     if let Ok(mut frame) =
                         renderer.render(&mut framebuffer, size, Transform::Flipped180)

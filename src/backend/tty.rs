@@ -1,7 +1,7 @@
 use smithay::{
     backend::{
         input::{
-            ButtonState, Event, InputEvent, KeyboardKeyEvent, PointerButtonEvent,
+            ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent,
             PointerMotionEvent,
         },
         libinput::{LibinputInputBackend, LibinputSessionInterface},
@@ -71,6 +71,7 @@ impl TtyBackend {
                     let time = event.time_msec();
                     let key_code = event.key_code();
                     let key_state = event.state();
+                    let is_press = key_state == KeyState::Pressed;
 
                     if let Some(keyboard) = state.keyboard.clone() {
                         keyboard.input::<(), _>(
@@ -91,17 +92,27 @@ impl TtyBackend {
                                     handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
 
                                 // VT Switching escape hatch: XF86Switch_VT_1..12, Ctrl+Alt+F1..12, or evdev keycodes
-                                if let Some(vt) = crate::input::parse_vt_switch(
-                                    current_modifiers,
-                                    sym,
-                                    raw_sym,
-                                    key_code.into(),
-                                ) {
-                                    info!("truss: switching to VT {vt} (Ctrl+Alt+F{vt})");
-                                    if let Err(e) = session_for_vt.change_vt(vt) {
-                                        tracing::warn!("truss: failed to switch to VT {vt}: {e}");
+                                // (check on both press and release for safety, but only act on press)
+                                if is_press {
+                                    if let Some(vt) = crate::input::parse_vt_switch(
+                                        current_modifiers,
+                                        sym,
+                                        raw_sym,
+                                        key_code.into(),
+                                    ) {
+                                        info!("truss: switching to VT {vt} (Ctrl+Alt+F{vt})");
+                                        if let Err(e) = session_for_vt.change_vt(vt) {
+                                            tracing::warn!(
+                                                "truss: failed to switch to VT {vt}: {e}"
+                                            );
+                                        }
+                                        return FilterResult::Intercept(());
                                     }
-                                    return FilterResult::Intercept(());
+                                }
+
+                                // Only match keybinds on key press, not release
+                                if !is_press {
+                                    return FilterResult::Forward;
                                 }
 
                                 if let Some(action) = data
