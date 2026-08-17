@@ -45,4 +45,11 @@ fn test_app_refresh_layout_and_space() {
     assert!(win1_geom.width > 0);
     assert!(win2_geom.width > 0);
     assert_ne!(win1_geom.x, win2_geom.x);
+
+    // Verify set_focused_window also triggers layout refresh and recalculates geometries
+    let w3 = app.state.create_window(Some(1)).unwrap();
+    app.set_focused_window(Some(w3));
+
+    let win3_geom = app.state.windows.get(&w3).unwrap().geometry;
+    assert!(win3_geom.width > 0 && win3_geom.height > 0);
 }

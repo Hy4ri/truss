@@ -175,22 +175,7 @@ impl App {
             }
         }
 
-        let focused = self.state.active_workspace().focused_window;
-        for (id, surface) in &self.surfaces {
-            let is_active = Some(*id) == focused;
-            surface.with_pending_state(|state| {
-                if is_active {
-                    state.states.set(
-                        smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
-                    );
-                } else {
-                    state.states.unset(
-                        smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
-                    );
-                }
-            });
-            surface.send_configure();
-        }
+        self.refresh_layout_and_space();
     }
 
     /// Refresh and recalculate layouts for active workspaces across outputs.
@@ -205,6 +190,34 @@ impl App {
         let active_ws = self.state.active_workspace_id;
         self.dispatcher
             .recalculate_workspace_layout(&mut self.state, active_ws, area);
+
+        // Update toplevel window surface states and configure sizes
+        let focused = self.state.active_workspace().focused_window;
+        for (&id, surface) in &self.surfaces {
+            if let Some(win) = self.state.windows.get(&id) {
+                let is_on_active_ws = win.workspace_id == active_ws;
+                let is_active = is_on_active_ws && Some(id) == focused;
+
+                surface.with_pending_state(|state| {
+                    if is_active {
+                        state.states.set(
+                            smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
+                        );
+                    } else {
+                        state.states.unset(
+                            smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
+                        );
+                    }
+
+                    if is_on_active_ws && !win.floating {
+                        state.size = Some(
+                            (win.geometry.width as i32, win.geometry.height as i32).into(),
+                        );
+                    }
+                });
+                surface.send_configure();
+            }
+        }
 
         // Update layer shell geometries for bars/panels
         for output in &self.output_manager.outputs {

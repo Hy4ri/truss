@@ -97,33 +97,41 @@ impl IpcServer {
                                             Ok(_) => {
                                                 let trimmed = line.trim();
                                                 if !trimmed.is_empty() {
-                                                    let response = match serde_json::from_str::<
-                                                        IpcRequest,
-                                                    >(
-                                                        trimmed
-                                                    ) {
-                                                        Ok(req) => {
-                                                            match app.dispatcher.dispatch(
-                                                                &mut app.state,
-                                                                req.command,
-                                                            ) {
-                                                                Ok(res) => IpcResponse::success(
-                                                                    req.id, res,
-                                                                ),
-                                                                Err(err) => {
-                                                                    IpcResponse::error(req.id, err)
+                                                    let response =
+                                                        match serde_json::from_str::<IpcRequest>(
+                                                            trimmed,
+                                                        ) {
+                                                            Ok(req) => {
+                                                                match app.dispatcher.dispatch(
+                                                                    &mut app.state,
+                                                                    req.command,
+                                                                ) {
+                                                                    Ok(res) => {
+                                                                        let new_focus = app
+                                                                            .state
+                                                                            .active_workspace()
+                                                                            .focused_window;
+                                                                        app.set_focused_window(
+                                                                            new_focus,
+                                                                        );
+                                                                        IpcResponse::success(
+                                                                            req.id, res,
+                                                                        )
+                                                                    }
+                                                                    Err(err) => IpcResponse::error(
+                                                                        req.id, err,
+                                                                    ),
                                                                 }
                                                             }
-                                                        }
-                                                        Err(parse_err) => IpcResponse {
-                                                            id: None,
-                                                            ok: false,
-                                                            result: None,
-                                                            error: Some(format!(
+                                                            Err(parse_err) => IpcResponse {
+                                                                id: None,
+                                                                ok: false,
+                                                                result: None,
+                                                                error: Some(format!(
                                                                 "Invalid JSON request: {parse_err}"
                                                             )),
-                                                        },
-                                                    };
+                                                            },
+                                                        };
 
                                                     if let Ok(resp_json) =
                                                         serde_json::to_string(&response)
