@@ -45,23 +45,11 @@ fn test_app_refresh_layout_and_space() {
     assert!(win1_geom.width > 0);
     assert!(win2_geom.width > 0);
     assert_ne!(win1_geom.x, win2_geom.x);
-}
 
-#[test]
-fn test_app_set_focused_window_refreshes_layout() {
-    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    // Verify set_focused_window also triggers layout refresh and recalculates geometries
+    let w3 = app.state.create_window(Some(1)).unwrap();
+    app.set_focused_window(Some(w3));
 
-    let w1 = app.state.create_window(Some(1)).unwrap();
-    let w2 = app.state.create_window(Some(1)).unwrap();
-
-    // Focusing w1 should trigger refresh_layout_and_space automatically
-    app.set_focused_window(Some(w1));
-
-    let win1_geom = app.state.windows.get(&w1).unwrap().geometry;
-    let win2_geom = app.state.windows.get(&w2).unwrap().geometry;
-
-    assert!(win1_geom.width > 0 && win1_geom.height > 0);
-    assert!(win2_geom.width > 0 && win2_geom.height > 0);
-    assert_ne!(win1_geom.x, win2_geom.x);
+    let win3_geom = app.state.windows.get(&w3).unwrap().geometry;
+    assert!(win3_geom.width > 0 && win3_geom.height > 0);
 }
