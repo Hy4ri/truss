@@ -8,7 +8,10 @@ use smithay::{
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
     },
     input::keyboard::FilterResult,
-    reexports::{calloop::LoopHandle, input::Libinput},
+    reexports::{
+        calloop::LoopHandle, input::Libinput,
+        wayland_server::backend::DisplayHandle,
+    },
 };
 use tracing::info;
 
@@ -27,6 +30,7 @@ impl TtyBackend {
     /// Attempt to initialize direct TTY session with libseat and libinput.
     pub fn init(
         loop_handle: &LoopHandle<'static, App>,
+        dh: &DisplayHandle,
         app: &mut App,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         info!("truss: initializing TTY direct backend via libseat and libinput");
@@ -138,10 +142,13 @@ impl TtyBackend {
             },
         )?;
 
-        // Ensure primary TTY output is registered
+        // Replace the phantom headless output with the real TTY output
+        app.output_manager.remove_output("HEADLESS-1");
+        // Ensure primary TTY output is registered AND advertised to clients
         let _tty_output = app
             .output_manager
             .create_default_output("TTY-DRM-1", (1920, 1080).into());
+        let _tty_global = _tty_output.create_global::<App>(dh);
         info!("truss: registered default physical display output 'TTY-DRM-1'");
 
         Ok(Self { session })
