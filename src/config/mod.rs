@@ -1,9 +1,9 @@
 use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::dispatch::{Command, Event};
-use crate::state::{WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher};
+use crate::state::{WindowId, WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher};
 
 /// Lua Configuration Runtime environment for truss.
 pub struct LuaConfig {
@@ -37,6 +37,11 @@ impl LuaConfig {
         let rules = self.lua.create_table()?;
         self.lua.set_named_registry_value("_truss_rules", rules)?;
 
+        // Autostart commands table
+        let autostart = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_autostart", autostart)?;
+
         // truss.version
         truss.set("version", env!("CARGO_PKG_VERSION"))?;
 
@@ -50,6 +55,28 @@ impl LuaConfig {
             lua_clone.load(&content).set_name(&path_str).exec()
         })?;
         truss.set("source", source_fn)?;
+
+        // Helper: truss.spawn(command) - immediate spawn
+        let spawn_fn = self.lua.create_function(|_, cmd: String| {
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .env("WAYLAND_DISPLAY", "truss-0")
+                .spawn();
+            Ok(())
+        })?;
+        truss.set("spawn", spawn_fn)?;
+
+        // Helper: truss.spawn_at_startup(command) - deferred launch on compositor ready
+        let lua_for_autostart = self.lua.clone();
+        let autostart_fn = self.lua.create_function(move |_, cmd: String| {
+            let autostart: mlua::Table =
+                lua_for_autostart.named_registry_value("_truss_autostart")?;
+            let len = autostart.raw_len();
+            autostart.set(len + 1, cmd)?;
+            Ok(())
+        })?;
+        truss.set("spawn_at_startup", autostart_fn)?;
 
         // Helper: truss.on(event_name, callback)
         let lua_for_on = self.lua.clone();
@@ -111,6 +138,36 @@ impl LuaConfig {
         })?;
         cmd_table.set("swap_master", swap_master)?;
 
+        let close_win = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowClose {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("close_window", close_win)?;
+
+        let toggle_float = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowToggleFloating {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("toggle_floating", toggle_float)?;
+
+        let toggle_fs = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowToggleFullscreen {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("toggle_fullscreen", toggle_fs)?;
+
+        let cmd_spawn = self.lua.create_function(|lua, command: String| {
+            let cmd = Command::Spawn { command };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("spawn", cmd_spawn)?;
+
         let set_gap = self.lua.create_function(|lua, gap: u32| {
             let cmd = Command::LayoutSetGap { gap };
             lua.to_value(&cmd)
@@ -162,6 +219,23 @@ impl LuaConfig {
 
                     manager.add_rule(WindowRule::new(name, matcher, action));
                 }
+            }
+        }
+    }
+
+    /// Run all commands registered with `truss.spawn_at_startup`
+    pub fn run_autostart_commands(&self, socket_name: &str) {
+        if let Ok(autostart) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_autostart")
+        {
+            for cmd in autostart.sequence_values::<String>().flatten() {
+                info!("truss: autostarting process: {cmd}");
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&cmd)
+                    .env("WAYLAND_DISPLAY", socket_name)
+                    .spawn();
             }
         }
     }

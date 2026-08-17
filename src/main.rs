@@ -34,15 +34,35 @@ use wayland_server::ListeningSocket;
 
 use truss::{
     backend::TtyBackend,
+    bar::run_status_bar,
+    cli::{handle_msg_command, CliArgs, Subcommand},
     dispatch::Command,
     input::{Modifiers, PointerFocusTarget},
     protocols::compositor::ClientState,
     App,
 };
 
-const WAYLAND_SOCKET: &str = "truss-0";
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = CliArgs::parse();
+
+    match cli.subcommand {
+        Some(Subcommand::Help) => {
+            CliArgs::print_help();
+            return Ok(());
+        }
+        Some(Subcommand::Version) => {
+            CliArgs::print_version();
+            return Ok(());
+        }
+        Some(Subcommand::Bar) => {
+            return run_status_bar("truss.sock");
+        }
+        Some(Subcommand::Msg(args)) => {
+            return handle_msg_command(&args);
+        }
+        None => {}
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -53,14 +73,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display: Display<App> = Display::new()?;
     let mut app = App::new(&mut display)?;
 
+    // If explicit config path was passed via CLI flags, load it
+    if let Some(ref config_path) = cli.config_path {
+        info!(
+            "truss: loading custom config from {}",
+            config_path.display()
+        );
+        if let Ok(()) = app.lua_config.load_file(config_path) {
+            app.lua_config.apply_rules_to_manager(&mut app.window_rules);
+            app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
+        }
+    }
+
     let dh = display.handle();
     let mut listener_dh = dh.clone();
 
     let mut event_loop = EventLoop::<App>::try_new()?;
     let loop_handle = event_loop.handle();
 
-    let listener = ListeningSocket::bind(WAYLAND_SOCKET)?;
-    info!("truss: wayland compositor running live at WAYLAND_DISPLAY={WAYLAND_SOCKET}");
+    let socket_name = cli.socket_name.as_str();
+    let listener = ListeningSocket::bind(socket_name)?;
+    info!("truss: wayland compositor running live at WAYLAND_DISPLAY={socket_name}");
 
     // Accept new wayland clients
     loop_handle.insert_source(
@@ -86,17 +119,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    // Backend Selection: Winit (nested graphical) -> TTY (direct DRM/libseat/libinput) -> Headless
-    let winit_init = winit::init::<GlesRenderer>();
+    // Trigger autostart applications configured in Lua
+    app.lua_config.run_autostart_commands(socket_name);
 
-    if let Ok((mut backend, winit_event_loop)) = winit_init {
+    // Backend Selection: Check CLI override or Auto-Detect
+    let force_backend = cli.backend.as_deref();
+
+    let try_winit = force_backend.is_none() || force_backend == Some("winit");
+    let try_tty = force_backend.is_none() || force_backend == Some("tty");
+
+    let winit_init = if try_winit {
+        winit::init::<GlesRenderer>().ok()
+    } else {
+        None
+    };
+
+    if let Some((mut backend, winit_event_loop)) = winit_init {
         info!("truss: running on Winit host window backend (nested graphical mode)");
         let window_size = backend.window_size();
         let default_output = app
             .output_manager
             .create_default_output("WINIT-1", (window_size.w, window_size.h).into());
 
-        info!("truss: Ready! Press Super+Enter inside the window to spawn terminal, or Super+Drag to move/resize");
+        info!("truss: Ready! Press Super+Return to spawn foot, Super+D for launcher, Super+Q to close window");
 
         let start_time = std::time::Instant::now();
         let mut current_modifiers = Modifiers::NONE;
@@ -243,11 +288,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             display.dispatch_clients(&mut app)?;
             display.flush_clients()?;
         }
-    } else {
+    } else if try_tty {
         match TtyBackend::init(&loop_handle, &mut app) {
             Ok(_tty_backend) => {
                 info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
-                info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`");
+                info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
 
                 while app.is_running() {
                     event_loop.dispatch(Duration::from_millis(10), &mut app)?;
@@ -257,7 +302,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(err) => {
                 warn!("truss: TTY initialization skipped ({err}), falling back to headless socket mode");
-                info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={WAYLAND_SOCKET} <app>`");
+                info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
 
                 while app.is_running() {
                     event_loop.dispatch(Duration::from_millis(10), &mut app)?;
@@ -265,6 +310,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     display.flush_clients()?;
                 }
             }
+        }
+    } else {
+        warn!("truss: running in forced headless mode");
+        info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+
+        while app.is_running() {
+            event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+            display.dispatch_clients(&mut app)?;
+            display.flush_clients()?;
         }
     }
 

@@ -90,6 +90,8 @@ impl Keybindings {
         // XKB Keysym constants
         const KEY_RETURN: u32 = 0xff0d;
         const KEY_Q: u32 = 0x0071;
+        const KEY_D: u32 = 0x0064;
+        const KEY_F: u32 = 0x0066;
         const KEY_J: u32 = 0x006a;
         const KEY_K: u32 = 0x006b;
         const KEY_SPACE: u32 = 0x0020;
@@ -101,10 +103,34 @@ impl Keybindings {
             KeyAction::Spawn("foot".into()),
         );
 
+        // Super + D -> App Launcher
+        kb.bind(
+            KeyPattern::new(Modifiers::SUPER, KEY_D),
+            KeyAction::Spawn("fuzzel || rofi -show drun || wofi".into()),
+        );
+
+        // Super + Q -> Close focused window
+        kb.bind(
+            KeyPattern::new(Modifiers::SUPER, KEY_Q),
+            KeyAction::Dispatch(Command::WindowClose { id: None }),
+        );
+
         // Super + Shift + Q -> Quit compositor
         kb.bind(
             KeyPattern::new(Modifiers::SUPER_SHIFT, KEY_Q),
             KeyAction::Dispatch(Command::CompositorQuit),
+        );
+
+        // Super + F -> Toggle fullscreen
+        kb.bind(
+            KeyPattern::new(Modifiers::SUPER, KEY_F),
+            KeyAction::Dispatch(Command::WindowToggleFullscreen { id: None }),
+        );
+
+        // Super + Shift + Space -> Toggle floating
+        kb.bind(
+            KeyPattern::new(Modifiers::SUPER_SHIFT, KEY_SPACE),
+            KeyAction::Dispatch(Command::WindowToggleFloating { id: None }),
         );
 
         // Super + j / k -> Focus Next / Prev
