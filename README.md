@@ -66,7 +66,7 @@ truss msg toggle-floating
 truss msg toggle-fullscreen
 truss msg layout-set monocle
 truss msg set-gap 16
-truss msg spawn "foot"
+truss msg spawn "kitty"
 
 # Launch the live companion status bar
 truss bar
@@ -78,7 +78,7 @@ truss bar
 
 | Key Combo | Action | Description |
 | :--- | :--- | :--- |
-| `Super + Return` | `Spawn("foot")` | Launch terminal emulator |
+| `Super + Return` | `Spawn("kitty")` | Launch terminal emulator |
 | `Super + D` | `Spawn("fuzzel")` | Launch application menu |
 | `Super + Q` | `WindowClose` | Close focused window |
 | `Super + Shift + Q` | `CompositorQuit` | Gracefully shut down compositor |

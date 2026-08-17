@@ -2,7 +2,6 @@ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement
 use smithay::backend::renderer::element::surface::{
     render_elements_from_surface_tree, WaylandSurfaceRenderElement,
 };
-use smithay::backend::renderer::element::utils::CropRenderElement;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::layer_map_for_output;
@@ -18,7 +17,6 @@ use crate::App;
 render_elements! {
     pub TrussRenderElement<=GlesRenderer>;
     Surface=WaylandSurfaceRenderElement<GlesRenderer>,
-    CroppedSurface=CropRenderElement<WaylandSurfaceRenderElement<GlesRenderer>>,
     Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
 }
 
@@ -122,20 +120,7 @@ pub fn collect_render_elements(
             1.0,
             Kind::Unspecified,
         );
-        // A client is allowed to keep its old buffer until it acknowledges the
-        // resize configure. Crop it to the assigned tile meanwhile, otherwise
-        // an older master window can visually remain full-screen and cover the
-        // stack after another application opens.
-        let tile = smithay::utils::Rectangle::new(
-            win_geom.into(),
-            (window.geometry.width as i32, window.geometry.height as i32).into(),
-        );
-        elements.extend(
-            win_elements
-                .into_iter()
-                .filter_map(|element| CropRenderElement::from_element(element, 1.0, tile))
-                .map(TrussRenderElement::CroppedSurface),
-        );
+        elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
     }
 
     // 4. Layer Shell Surfaces: Bottom & Background layers

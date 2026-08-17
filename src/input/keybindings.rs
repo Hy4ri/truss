@@ -61,7 +61,7 @@ impl KeyPattern {
 pub enum KeyAction {
     /// Dispatch an internal strongly typed Command
     Dispatch(Command),
-    /// Execute an external shell process (e.g. "foot", "alacritty", "rofi")
+    /// Execute an external shell process (e.g. "kitty", "alacritty", "rofi")
     Spawn(String),
 }
 
@@ -100,7 +100,7 @@ impl Keybindings {
         // Super + Return -> Spawn terminal
         kb.bind(
             KeyPattern::new(Modifiers::SUPER, KEY_RETURN),
-            KeyAction::Spawn("foot".into()),
+            KeyAction::Spawn("kitty".into()),
         );
 
         // Super + D -> App Launcher
@@ -221,16 +221,11 @@ impl Keybindings {
                 info!("Keybinding triggered spawn: {}", cmd);
                 let wayland_display =
                     std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
-                std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(cmd)
-                    .env("WAYLAND_DISPLAY", &wayland_display)
-                    .spawn()
-                    .map_err(|e| {
-                        crate::dispatch::DispatchError::InvalidParams(format!(
-                            "Failed to spawn {cmd}: {e}"
-                        ))
-                    })?;
+                crate::process::spawn_wayland_command(cmd, &wayland_display).map_err(|e| {
+                    crate::dispatch::DispatchError::InvalidParams(format!(
+                        "Failed to spawn {cmd}: {e}"
+                    ))
+                })?;
                 Ok(crate::dispatch::DispatchResult::Ok)
             }
         }

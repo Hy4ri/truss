@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{io::IsTerminal, sync::Arc, time::Duration};
 
 use smithay::{
     backend::{
@@ -103,9 +103,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Backend Selection: Check CLI override or Auto-Detect
     let force_backend = cli.backend.as_deref();
+    let launched_from_tty = std::io::stdin().is_terminal();
 
-    let try_winit = force_backend.is_none() || force_backend == Some("winit");
-    let try_tty = force_backend.is_none() || force_backend == Some("tty");
+    let (try_winit, try_tty) = match force_backend {
+        Some("winit") => (true, false),
+        Some("tty") => (false, true),
+        Some("headless") => (false, false),
+        _ => {
+            // Auto mode:
+            // - On a real TTY, prefer direct TTY backend first.
+            // - Otherwise, prefer nested winit backend first.
+            if launched_from_tty {
+                (false, true)
+            } else {
+                (true, false)
+            }
+        }
+    };
 
     let winit_init = if try_winit {
         winit::init::<GlesRenderer>().ok()
@@ -122,10 +136,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .output_manager
             .create_default_output("WINIT-1", (window_size.w, window_size.h).into());
         // CRITICAL: advertise the output as a wl_output global, otherwise clients
-        // see zero monitors ("no monitors available" in foot).
+        // see zero monitors ("no monitors available" in terminal apps).
         let _global = default_output.create_global::<App>(&dh);
 
-        info!("truss: Ready! Press Super+Return to spawn foot, Super+D for launcher, Super+Q to close window");
+        info!("truss: Ready! Press Super+Return to spawn kitty, Super+D for launcher, Super+Q to close window");
 
         let start_time = std::time::Instant::now();
         let mut current_modifiers = Modifiers::NONE;
@@ -396,7 +410,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &default_output,
                         elapsed,
                         None,
-                        |_, _| None,
+                        |_, _| Some(default_output.clone()),
                     );
                 }
             }
@@ -410,7 +424,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match TtyBackend::init(&loop_handle, &dh, &mut app) {
             Ok(mut tty_backend) => {
                 info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
-                info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+                info!("truss: Ready! Press Super+Return to spawn kitty, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
                 info!(
                     "truss: Press Ctrl+Alt+F1..F12 to switch VTs, or Super+Shift+Q to exit cleanly"
                 );
@@ -444,7 +458,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     output,
                                     elapsed,
                                     None,
-                                    |_, _| None,
+                                    |_, _| Some(output.clone()),
                                 );
                             }
                         }

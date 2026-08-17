@@ -46,9 +46,9 @@ fn test_vt_switch_keysym_calculation() {
 fn test_default_keybindings_match() {
     let kb = Keybindings::new_default();
 
-    // Super + Return -> Spawn("foot")
+    // Super + Return -> Spawn("kitty")
     let action_return = kb.match_action(Modifiers::SUPER, 0xff0d);
-    assert_eq!(action_return, Some(&KeyAction::Spawn("foot".into())));
+    assert_eq!(action_return, Some(&KeyAction::Spawn("kitty".into())));
 
     // Super + Shift + Q -> CompositorQuit (matching both lowercase 0x71 and uppercase 0x51)
     let action_quit_lower = kb.match_action(Modifiers::SUPER_SHIFT, 0x0071);

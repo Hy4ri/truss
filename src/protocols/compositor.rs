@@ -49,6 +49,18 @@ impl CompositorHandler for App {
         on_commit_buffer_handler::<Self>(surface);
         self.popups.commit(surface);
 
+        if let Some(pending_id) = self.pending_focus_window {
+            if self
+                .surfaces
+                .get(&pending_id)
+                .map(|toplevel| toplevel.wl_surface() == surface)
+                .unwrap_or(false)
+            {
+                self.pending_focus_window = None;
+                self.set_focused_window(Some(pending_id));
+            }
+        }
+
         // Notify transaction manager of committed surface
         if let Some((&win_id, _)) = self
             .surfaces

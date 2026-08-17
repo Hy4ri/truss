@@ -65,11 +65,7 @@ impl LuaConfig {
         let spawn_fn = self.lua.create_function(|_, cmd: String| {
             let wayland_display =
                 std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
-            let _ = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(&cmd)
-                .env("WAYLAND_DISPLAY", &wayland_display)
-                .spawn();
+            let _ = crate::process::spawn_wayland_command(&cmd, &wayland_display);
             Ok(())
         })?;
         truss.set("spawn", spawn_fn)?;
@@ -238,11 +234,7 @@ impl LuaConfig {
         {
             for cmd in autostart.sequence_values::<String>().flatten() {
                 info!("truss: autostarting process: {cmd}");
-                let _ = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(&cmd)
-                    .env("WAYLAND_DISPLAY", socket_name)
-                    .spawn();
+                let _ = crate::process::spawn_wayland_command(&cmd, socket_name);
             }
         }
     }

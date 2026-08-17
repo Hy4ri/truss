@@ -38,7 +38,7 @@ impl OutputManager {
     /// Note: the caller must advertise the returned [`Output`] to clients via
     /// [`Output::create_global`](smithay::output::Output::create_global) with the compositor's
     /// `DisplayHandle`, otherwise clients see no `wl_output` globals and refuse to start
-    /// (e.g. foot: "no monitors available").
+    /// (e.g. terminal clients reporting "no monitors available").
     pub fn create_output(
         &mut self,
         name: &str,
@@ -50,7 +50,7 @@ impl OutputManager {
             name.to_string(),
             PhysicalProperties {
                 // Physical size in millimeters. A virtual/headless output gets a
-                // nominal 96 DPI sizing so clients (foot, etc.) compute sane DPI.
+                // nominal 96 DPI sizing so clients (kitty, etc.) compute sane DPI.
                 size: (
                     (size.w as f64 * 25.4 / 96.0).round() as i32,
                     (size.h as f64 * 25.4 / 96.0).round() as i32,

@@ -47,8 +47,9 @@ impl XdgShellHandler for App {
         // Evaluate and apply declarative window rules
         self.apply_window_rules(window_id);
 
-        // Focus new toplevel window by default (this will recalculate layout & configure surfaces)
+        // Focus immediately for input delivery, and re-assert on first commit.
         self.set_focused_window(Some(window_id));
+        self.pending_focus_window = Some(window_id);
 
         let workspace_id = self
             .state
@@ -141,6 +142,9 @@ impl XdgShellHandler for App {
         }
 
         if let Some(id) = target_id {
+            if self.pending_focus_window == Some(id) {
+                self.pending_focus_window = None;
+            }
             self.surfaces.remove(&id);
             let _ = self.state.remove_window(id);
             info!("xdg_toplevel unmapped: {:?}", id);
