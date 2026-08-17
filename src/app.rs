@@ -8,10 +8,12 @@ use smithay::{
     reexports::wayland_server::{Client, Display},
     wayland::{
         compositor::CompositorState,
+        fractional_scale::FractionalScaleManagerState,
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
         shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::ShmState,
+        viewporter::ViewporterState,
     },
 };
 use std::{
@@ -41,6 +43,8 @@ pub struct App {
     pub shm_state: ShmState,
     pub data_device_state: DataDeviceState,
     pub output_manager_state: OutputManagerState,
+    pub fractional_scale_manager_state: FractionalScaleManagerState,
+    pub viewporter_state: ViewporterState,
     pub seat_state: SeatState<Self>,
     pub seat: Seat<Self>,
     pub keyboard: Option<KeyboardHandle<Self>>,
@@ -73,6 +77,8 @@ impl App {
         let shm_state = ShmState::new::<Self>(&dh, vec![]);
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
+        let fractional_scale_manager_state = FractionalScaleManagerState::new::<Self>(&dh);
+        let viewporter_state = ViewporterState::new::<Self>(&dh);
 
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat-0");
@@ -124,6 +130,8 @@ impl App {
             shm_state,
             data_device_state,
             output_manager_state,
+            fractional_scale_manager_state,
+            viewporter_state,
             seat_state,
             seat,
             keyboard: Some(keyboard),

@@ -1,5 +1,6 @@
 pub mod compositor;
 pub mod data_device;
+pub mod fractional_scale;
 pub mod layer_shell;
 pub mod output;
 pub mod seat;
