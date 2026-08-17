@@ -63,10 +63,12 @@ impl LuaConfig {
 
         // Helper: truss.spawn(command) - immediate spawn
         let spawn_fn = self.lua.create_function(|_, cmd: String| {
+            let wayland_display =
+                std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
             let _ = std::process::Command::new("sh")
                 .arg("-c")
                 .arg(&cmd)
-                .env("WAYLAND_DISPLAY", "truss-0")
+                .env("WAYLAND_DISPLAY", &wayland_display)
                 .spawn();
             Ok(())
         })?;

@@ -45,6 +45,7 @@ pub struct App {
     pub output_manager_state: OutputManagerState,
     pub fractional_scale_manager_state: FractionalScaleManagerState,
     pub viewporter_state: ViewporterState,
+    pub xdg_decoration_state: smithay::wayland::shell::xdg::decoration::XdgDecorationState,
     pub seat_state: SeatState<Self>,
     pub seat: Seat<Self>,
     pub keyboard: Option<KeyboardHandle<Self>>,
@@ -79,6 +80,8 @@ impl App {
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let fractional_scale_manager_state = FractionalScaleManagerState::new::<Self>(&dh);
         let viewporter_state = ViewporterState::new::<Self>(&dh);
+        let xdg_decoration_state =
+            smithay::wayland::shell::xdg::decoration::XdgDecorationState::new::<Self>(&dh);
 
         let mut seat_state = SeatState::new();
         let mut seat = seat_state.new_wl_seat(&dh, "seat-0");
@@ -132,6 +135,7 @@ impl App {
             output_manager_state,
             fractional_scale_manager_state,
             viewporter_state,
+            xdg_decoration_state,
             seat_state,
             seat,
             keyboard: Some(keyboard),
@@ -240,6 +244,110 @@ impl App {
             let mut layer_map = layer_map_for_output(output);
             let _ = layer_map.arrange();
         }
+    }
+
+    /// Find which Wayland client surface is under the pointer across all layers (layer-shell, popups, windows).
+    pub fn surface_under(
+        &self,
+        point: smithay::utils::Point<f64, smithay::utils::Logical>,
+    ) -> Option<(
+        smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+        smithay::utils::Point<f64, smithay::utils::Logical>,
+    )> {
+        use smithay::desktop::layer_map_for_output;
+        use smithay::wayland::shell::wlr_layer::Layer;
+
+        // 1. Overlay & Top Layer Shell surfaces
+        for output in &self.output_manager.outputs {
+            let layer_map = layer_map_for_output(output);
+            for layer in [Layer::Overlay, Layer::Top] {
+                if let Some(surface) = layer_map.layer_under(layer, point) {
+                    if let Some(geom) = layer_map.layer_geometry(surface) {
+                        return Some((
+                            surface.wl_surface().clone(),
+                            smithay::utils::Point::from((geom.loc.x as f64, geom.loc.y as f64)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 2. Popups associated with toplevel windows on active workspace
+        let active_ws = self.state.active_workspace_id;
+        for surface in self.xdg_shell_state.toplevel_surfaces() {
+            let win_entry = self
+                .surfaces
+                .iter()
+                .find(|(_, s)| s.wl_surface() == surface.wl_surface())
+                .and_then(|(id, _)| self.state.windows.get(id));
+
+            if let Some(win) = win_entry {
+                if win.workspace_id != active_ws {
+                    continue;
+                }
+                let win_geom = (win.geometry.x, win.geometry.y);
+                for (popup, popup_loc) in
+                    smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
+                {
+                    let popup_origin = smithay::utils::Point::from((
+                        (win_geom.0 + popup_loc.x) as f64,
+                        (win_geom.1 + popup_loc.y) as f64,
+                    ));
+                    let geom = popup.geometry();
+                    let abs_rect = smithay::utils::Rectangle::new(
+                        (
+                            win_geom.0 + popup_loc.x + geom.loc.x,
+                            win_geom.1 + popup_loc.y + geom.loc.y,
+                        )
+                            .into(),
+                        geom.size,
+                    );
+                    if abs_rect.to_f64().contains(point) {
+                        return Some((popup.wl_surface().clone(), popup_origin));
+                    }
+                }
+            }
+        }
+
+        // 3. Toplevel Windows on active workspace
+        let px = point.x as i32;
+        let py = point.y as i32;
+        if let Some(ws) = self.state.workspaces.get(&active_ws) {
+            for &win_id in ws.windows.iter().rev() {
+                if let Some(win) = self.state.windows.get(&win_id) {
+                    let r = &win.geometry;
+                    if px >= r.x
+                        && px < r.x + r.width as i32
+                        && py >= r.y
+                        && py < r.y + r.height as i32
+                    {
+                        if let Some(surface) = self.surfaces.get(&win_id) {
+                            return Some((
+                                surface.wl_surface().clone(),
+                                smithay::utils::Point::from((r.x as f64, r.y as f64)),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Bottom & Background Layer Shell surfaces
+        for output in &self.output_manager.outputs {
+            let layer_map = layer_map_for_output(output);
+            for layer in [Layer::Bottom, Layer::Background] {
+                if let Some(surface) = layer_map.layer_under(layer, point) {
+                    if let Some(geom) = layer_map.layer_geometry(surface) {
+                        return Some((
+                            surface.wl_surface().clone(),
+                            smithay::utils::Point::from((geom.loc.x as f64, geom.loc.y as f64)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     pub fn is_running(&self) -> bool {
