@@ -170,15 +170,15 @@ impl TtyBackend {
                                     state.state.windows.get(&win_id),
                                     state.surfaces.get(&win_id),
                                 ) {
-                                    let rel_pos = smithay::utils::Point::from((
-                                        pos.x - win.geometry.x as f64,
-                                        pos.y - win.geometry.y as f64,
+                                    let win_origin = smithay::utils::Point::from((
+                                        win.geometry.x as f64,
+                                        win.geometry.y as f64,
                                     ));
                                     pointer.motion(
                                         state,
-                                        Some((surface.wl_surface().clone(), rel_pos)),
+                                        Some((surface.wl_surface().clone(), win_origin)),
                                         &smithay::input::pointer::MotionEvent {
-                                            location: rel_pos,
+                                            location: pos,
                                             serial,
                                             time,
                                         },
@@ -197,6 +197,7 @@ impl TtyBackend {
                                 );
                             }
                         }
+                        pointer.frame(state);
                     }
                 }
                 InputEvent::PointerButton { event } => {
@@ -228,6 +229,7 @@ impl TtyBackend {
                                         time,
                                     },
                                 );
+                                pointer.frame(state);
                             }
                         } else {
                             state.set_focused_window(None);
@@ -244,6 +246,7 @@ impl TtyBackend {
                                     time,
                                 },
                             );
+                            pointer.frame(state);
                         }
                     }
                 }
