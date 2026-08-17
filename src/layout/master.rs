@@ -10,7 +10,7 @@ use crate::state::{Rect, WindowId};
 pub struct MasterLayout;
 
 impl Layout for MasterLayout {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "master"
     }
 

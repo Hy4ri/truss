@@ -8,7 +8,7 @@ use crate::state::{Rect, WindowId};
 pub struct MonocleLayout;
 
 impl Layout for MonocleLayout {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "monocle"
     }
 

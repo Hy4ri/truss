@@ -6,15 +6,7 @@ use smithay::{
             AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyboardKeyEvent,
             PointerButtonEvent,
         },
-        renderer::{
-            element::{
-                surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement},
-                Kind,
-            },
-            gles::GlesRenderer,
-            utils::draw_render_elements,
-            Color32F, Frame, Renderer,
-        },
+        renderer::{gles::GlesRenderer, utils::draw_render_elements, Color32F, Frame, Renderer},
         winit::{self, WinitEvent},
     },
     desktop::utils::send_frames_surface_tree,
@@ -238,29 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let damage = Rectangle::from_size(size);
             {
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
-                    let elements = app
-                        .xdg_shell_state
-                        .toplevel_surfaces()
-                        .iter()
-                        .flat_map(|surface| {
-                            let win_geom = app
-                                .surfaces
-                                .iter()
-                                .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-                                .and_then(|(id, _)| app.state.windows.get(id))
-                                .map(|w| (w.geometry.x, w.geometry.y))
-                                .unwrap_or((0, 0));
-
-                            render_elements_from_surface_tree(
-                                renderer,
-                                surface.wl_surface(),
-                                win_geom,
-                                1.0,
-                                1.0,
-                                Kind::Unspecified,
-                            )
-                        })
-                        .collect::<Vec<WaylandSurfaceRenderElement<GlesRenderer>>>();
+                    let elements = truss::backend::collect_render_elements(&app, renderer);
 
                     if let Ok(mut frame) =
                         renderer.render(&mut framebuffer, size, Transform::Flipped180)
