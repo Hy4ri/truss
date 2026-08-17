@@ -1,5 +1,5 @@
 use smithay::{
-    desktop::layer_map_for_output,
+    desktop::{layer_map_for_output, PopupManager},
     input::{
         keyboard::{KeyboardHandle, XkbConfig},
         pointer::{CursorImageStatus, PointerHandle},
@@ -53,6 +53,7 @@ pub struct App {
     pub lua_config: LuaConfig,
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, smithay::wayland::shell::xdg::ToplevelSurface>,
+    pub popups: PopupManager,
     pub state: State,
     pub dispatcher: Dispatcher,
     pub ipc: IpcServer,
@@ -134,6 +135,7 @@ impl App {
             lua_config,
             clients: Vec::new(),
             surfaces: HashMap::new(),
+            popups: PopupManager::default(),
             state,
             dispatcher,
             ipc,
@@ -144,6 +146,9 @@ impl App {
 
     /// Refresh and recalculate layouts for active workspaces across outputs.
     pub fn refresh_layout_and_space(&mut self) {
+        // Cleanup dead popup trees periodically
+        self.popups.cleanup();
+
         let area = self.output_manager.primary_usable_area();
         let active_ws = self.state.active_workspace_id;
         self.dispatcher

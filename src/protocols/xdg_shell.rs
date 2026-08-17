@@ -116,8 +116,11 @@ impl XdgShellHandler for App {
         }
     }
 
-    fn new_popup(&mut self, _surface: PopupSurface, _positioner: PositionerState) {
-        // Popups handling in polish milestone
+    fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
+        // Track popup using PopupManager
+        if let Err(err) = self.popups.track_popup(surface.into()) {
+            warn!("Failed to track popup: {err}");
+        }
     }
 
     fn grab(&mut self, _surface: PopupSurface, _seat: WlSeat, _serial: Serial) {}

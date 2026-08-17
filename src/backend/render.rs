@@ -50,7 +50,7 @@ pub fn collect_render_elements(
         }
     }
 
-    // 2. Normal Toplevel Windows
+    // 2. Normal Toplevel Windows & Popups
     for surface in app.xdg_shell_state.toplevel_surfaces() {
         let win_geom = app
             .surfaces
@@ -69,6 +69,22 @@ pub fn collect_render_elements(
             Kind::Unspecified,
         );
         elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
+
+        // Render associated popups (context menus, dropdowns, tooltips)
+        for (popup, popup_loc) in
+            smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
+        {
+            let popup_abs_pos = (win_geom.0 + popup_loc.x, win_geom.1 + popup_loc.y);
+            let popup_elements = render_elements_from_surface_tree(
+                renderer,
+                popup.wl_surface(),
+                popup_abs_pos,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(popup_elements.into_iter().map(TrussRenderElement::Surface));
+        }
     }
 
     // 3. Cursor (rendered LAST = on top of everything)
