@@ -48,6 +48,15 @@ impl CompositorHandler for App {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         self.popups.commit(surface);
+
+        // Notify transaction manager of committed surface
+        if let Some((&win_id, _)) = self
+            .surfaces
+            .iter()
+            .find(|(_, s)| s.wl_surface() == surface)
+        {
+            self.transaction_manager.on_surface_commit(win_id);
+        }
     }
 }
 
