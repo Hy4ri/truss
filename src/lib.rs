@@ -9,6 +9,7 @@ pub mod ipc;
 pub mod layout;
 pub mod protocols;
 pub mod state;
+pub mod sync;
 
 pub use app::App;
 pub use backend::{
@@ -31,3 +32,4 @@ pub use state::{
     Rect, State, StateError, Window, WindowId, WindowRule, WindowRuleAction, WindowRuleManager,
     WindowRuleMatcher, Workspace,
 };
+pub use sync::{Transaction, TransactionManager, TRANSACTION_TIMEOUT};

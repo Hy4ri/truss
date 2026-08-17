@@ -31,6 +31,7 @@ use crate::{
     input::{Keybindings, PointerState},
     ipc::IpcServer,
     state::{State, WindowId, WindowRuleManager},
+    sync::TransactionManager,
 };
 
 pub struct App {
@@ -54,6 +55,7 @@ pub struct App {
     pub clients: Vec<Client>,
     pub surfaces: HashMap<WindowId, smithay::wayland::shell::xdg::ToplevelSurface>,
     pub popups: PopupManager,
+    pub transaction_manager: TransactionManager,
     pub state: State,
     pub dispatcher: Dispatcher,
     pub ipc: IpcServer,
@@ -136,6 +138,7 @@ impl App {
             clients: Vec::new(),
             surfaces: HashMap::new(),
             popups: PopupManager::default(),
+            transaction_manager: TransactionManager::new(),
             state,
             dispatcher,
             ipc,
@@ -148,6 +151,9 @@ impl App {
     pub fn refresh_layout_and_space(&mut self) {
         // Cleanup dead popup trees periodically
         self.popups.cleanup();
+
+        // Prune expired sync transactions
+        self.transaction_manager.prune_expired();
 
         let area = self.output_manager.primary_usable_area();
         let active_ws = self.state.active_workspace_id;
