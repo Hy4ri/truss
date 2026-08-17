@@ -183,7 +183,27 @@ impl Keybindings {
 
     pub fn match_action(&self, modifiers: Modifiers, keysym: u32) -> Option<&KeyAction> {
         let pattern = KeyPattern::new(modifiers, keysym);
-        self.bindings.get(&pattern)
+        if let Some(action) = self.bindings.get(&pattern) {
+            return Some(action);
+        }
+
+        // Case folding: 'A'..='Z' (0x41..=0x5a) -> 'a'..='z' (0x61..=0x7a)
+        if (0x0041..=0x005a).contains(&keysym) {
+            let lower_pattern = KeyPattern::new(modifiers, keysym + 0x20);
+            if let Some(action) = self.bindings.get(&lower_pattern) {
+                return Some(action);
+            }
+        }
+
+        // Case folding: 'a'..='z' (0x61..=0x7a) -> 'A'..='Z' (0x41..=0x5a)
+        if (0x0061..=0x007a).contains(&keysym) {
+            let upper_pattern = KeyPattern::new(modifiers, keysym - 0x20);
+            if let Some(action) = self.bindings.get(&upper_pattern) {
+                return Some(action);
+            }
+        }
+
+        None
     }
 
     pub fn execute_action(
@@ -213,4 +233,39 @@ impl Keybindings {
             }
         }
     }
+}
+
+/// Helper function to parse virtual terminal switch requests from keyboard events.
+/// Handles:
+/// 1. XKB XF86Switch_VT_1..12 keysyms (0x1008FE01..=0x1008FE0C)
+/// 2. Ctrl + Alt + F1..F12 keysyms (0xffbe..=0xffc9)
+/// 3. Ctrl + Alt + raw Linux evdev keycodes (59..=68 for F1-F10, 87 for F11, 88 for F12)
+pub fn parse_vt_switch(modifiers: Modifiers, sym: u32, raw_sym: u32, key_code: u32) -> Option<i32> {
+    // 1. XKB XF86Switch_VT_1..12 keysyms
+    if (0x1008_fe01..=0x1008_fe0c).contains(&sym) {
+        return Some((sym - 0x1008_fe01 + 1) as i32);
+    }
+    if (0x1008_fe01..=0x1008_fe0c).contains(&raw_sym) {
+        return Some((raw_sym - 0x1008_fe01 + 1) as i32);
+    }
+
+    // 2. Ctrl + Alt + F1..F12 keysyms
+    if modifiers.ctrl && modifiers.alt {
+        if (0xffbe..=0xffc9).contains(&sym) {
+            return Some((sym - 0xffbe + 1) as i32);
+        }
+        if (0xffbe..=0xffc9).contains(&raw_sym) {
+            return Some((raw_sym - 0xffbe + 1) as i32);
+        }
+
+        // 3. Ctrl + Alt + raw evdev keycodes
+        match key_code {
+            59..=68 => return Some((key_code - 59 + 1) as i32),
+            87 => return Some(11),
+            88 => return Some(12),
+            _ => {}
+        }
+    }
+
+    None
 }
