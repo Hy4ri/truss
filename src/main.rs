@@ -12,11 +12,7 @@ use smithay::{
     desktop::utils::send_frames_surface_tree,
     input::keyboard::FilterResult,
     reexports::{
-        calloop::{
-            generic::Generic,
-            timer::{TimeoutAction, Timer},
-            EventLoop, Interest, Mode, PostAction,
-        },
+        calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
         wayland_server::Display,
     },
     utils::{Rectangle, Transform},
@@ -99,17 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    // Periodic IPC poll & layout refresh
-    loop_handle.insert_source(
-        Timer::from_duration(Duration::from_millis(16)),
-        move |_, _, state: &mut App| {
-            state
-                .ipc
-                .poll_and_dispatch(&mut state.state, &mut state.dispatcher);
-            state.refresh_layout_and_space();
-            TimeoutAction::ToDuration(Duration::from_millis(16))
-        },
-    )?;
+    // Register IPC server with calloop event reactor
+    app.ipc.register_calloop_source(&loop_handle)?;
 
     // Trigger autostart applications configured in Lua
     app.lua_config.run_autostart_commands(socket_name);
