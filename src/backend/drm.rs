@@ -8,7 +8,7 @@ use smithay::{
         },
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
-        renderer::{gles::GlesRenderer, utils::draw_render_elements, Bind, Frame, Renderer},
+        renderer::{damage::OutputDamageTracker, gles::GlesRenderer, Bind},
         session::{libseat::LibSeatSession, Session},
     },
     output::Output,
@@ -18,7 +18,7 @@ use smithay::{
         rustix::fs::OFlags,
         wayland_server::DisplayHandle,
     },
-    utils::{DeviceFd, Rectangle, Size, Transform},
+    utils::DeviceFd,
 };
 use tracing::{info, warn};
 
@@ -33,6 +33,7 @@ pub struct DrmDisplay {
     pub output: Output,
     pub gbm_surface: GbmBufferedSurface<GbmAllocator<DrmDeviceFd>, ()>,
     pub renderer: GlesRenderer,
+    pub damage_tracker: OutputDamageTracker,
     pub size: (i32, i32),
     pub cursor_manager: crate::backend::cursor::CursorManager,
 }
@@ -40,7 +41,7 @@ pub struct DrmDisplay {
 impl DrmDisplay {
     /// Render current compositor scene (windows, background, layers) and scan out to the physical monitor.
     pub fn render_frame(&mut self, app: &App) -> Result<(), Box<dyn std::error::Error>> {
-        let (mut dmabuf, _age) = self
+        let (mut dmabuf, age) = self
             .gbm_surface
             .next_buffer()
             .map_err(|e| format!("DRM next_buffer failed: {e}"))?;
@@ -50,20 +51,18 @@ impl DrmDisplay {
             .bind(&mut dmabuf)
             .map_err(|e| format!("GlesRenderer bind dmabuf failed: {e}"))?;
 
-        let size = Size::from((self.size.0, self.size.1));
-        let damage = Rectangle::from_size(size);
         let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
 
-        let mut frame = self
-            .renderer
-            .render(&mut framebuffer, size, Transform::Normal)
-            .map_err(|e| format!("GlesRenderer render failed: {e}"))?;
-
-        let _ = frame.clear(DESKTOP_BG_COLOR, &[damage]);
-        let _ = draw_render_elements(&mut frame, 1.0, &elements, &[damage]);
-        let _ = frame
-            .finish()
-            .map_err(|e| format!("Frame finish failed: {e}"))?;
+        let _render_res = self
+            .damage_tracker
+            .render_output(
+                &mut self.renderer,
+                &mut framebuffer,
+                age as usize,
+                &elements,
+                DESKTOP_BG_COLOR,
+            )
+            .map_err(|e| format!("Damage tracker render_output failed: {e}"))?;
 
         self.gbm_surface
             .queue_buffer(None, None, ())
@@ -285,6 +284,7 @@ pub fn discover_and_init_drm_displays(
 
             displays.push(DrmDisplay {
                 name: conn_name,
+                damage_tracker: OutputDamageTracker::from_output(&output),
                 output,
                 gbm_surface,
                 renderer,
