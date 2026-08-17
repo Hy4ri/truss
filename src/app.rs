@@ -80,7 +80,7 @@ impl App {
         let pointer = seat.add_pointer();
 
         let mut output_manager = OutputManager::new();
-        output_manager.create_default_output("HEADLESS-1", (1920, 1080).into());
+        let _headless = output_manager.create_default_output("HEADLESS-1", (1920, 1080).into());
 
         let render_manager = RenderManager::new();
 

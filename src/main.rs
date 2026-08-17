@@ -128,10 +128,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some((mut backend, winit_event_loop)) = winit_init {
         info!("truss: running on Winit host window backend (nested graphical mode)");
+        // Replace the phantom headless output with the real winit-backed output
+        app.output_manager.remove_output("HEADLESS-1");
         let window_size = backend.window_size();
         let default_output = app
             .output_manager
             .create_default_output("WINIT-1", (window_size.w, window_size.h).into());
+        // CRITICAL: advertise the output as a wl_output global, otherwise clients
+        // see zero monitors ("no monitors available" in foot).
+        let _global = default_output.create_global::<App>(&dh);
 
         info!("truss: Ready! Press Super+Return to spawn foot, Super+D for launcher, Super+Q to close window");
 
@@ -259,7 +264,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             display.flush_clients()?;
         }
     } else if try_tty {
-        match TtyBackend::init(&loop_handle, &mut app) {
+        match TtyBackend::init(&loop_handle, &dh, &mut app) {
             Ok(_tty_backend) => {
                 info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
                 info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
@@ -273,6 +278,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Err(err) => {
                 warn!("truss: TTY initialization skipped ({err}), falling back to headless socket mode");
                 info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+                // Advertise the headless output so clients see a monitor
+                if let Some(o) = app.output_manager.find_output_by_name("HEADLESS-1") {
+                    let _g = o.create_global::<App>(&dh);
+                }
 
                 while app.is_running() {
                     event_loop.dispatch(Duration::from_millis(10), &mut app)?;
@@ -284,6 +293,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         warn!("truss: running in forced headless mode");
         info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+        // Advertise the headless output so clients see a monitor
+        if let Some(o) = app.output_manager.find_output_by_name("HEADLESS-1") {
+            let _g = o.create_global::<App>(&dh);
+        }
 
         while app.is_running() {
             event_loop.dispatch(Duration::from_millis(10), &mut app)?;

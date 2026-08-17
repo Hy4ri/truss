@@ -1,5 +1,7 @@
-use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel};
-use smithay::utils::{Point, Size};
+use smithay::{
+    output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel},
+    utils::{Point, Size},
+};
 
 use crate::state::Rect;
 
@@ -32,6 +34,11 @@ impl OutputManager {
     }
 
     /// Creates and configures an output device positioned at `position` with resolution `size`.
+    ///
+    /// Note: the caller must advertise the returned [`Output`] to clients via
+    /// [`Output::create_global`](smithay::output::Output::create_global) with the compositor's
+    /// `DisplayHandle`, otherwise clients see no `wl_output` globals and refuse to start
+    /// (e.g. foot: "no monitors available").
     pub fn create_output(
         &mut self,
         name: &str,
@@ -42,7 +49,13 @@ impl OutputManager {
         let output = Output::new(
             name.to_string(),
             PhysicalProperties {
-                size: (0, 0).into(),
+                // Physical size in millimeters. A virtual/headless output gets a
+                // nominal 96 DPI sizing so clients (foot, etc.) compute sane DPI.
+                size: (
+                    (size.w as f64 * 25.4 / 96.0).round() as i32,
+                    (size.h as f64 * 25.4 / 96.0).round() as i32,
+                )
+                    .into(),
                 subpixel: Subpixel::Unknown,
                 make: "truss".to_string(),
                 model: "display".to_string(),
