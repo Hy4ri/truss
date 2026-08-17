@@ -12,7 +12,8 @@ pub mod state;
 
 pub use app::App;
 pub use backend::{
-    collect_render_elements, OutputInfo, OutputManager, RenderManager, TtyBackend, DESKTOP_BG_COLOR,
+    collect_render_elements, CursorManager, OutputInfo, OutputManager, RenderManager,
+    TrussRenderElement, TtyBackend, DESKTOP_BG_COLOR,
 };
 pub use bar::run_status_bar;
 pub use cli::{handle_msg_command, CliArgs, Subcommand};

@@ -34,6 +34,7 @@ pub struct DrmDisplay {
     pub gbm_surface: GbmBufferedSurface<GbmAllocator<DrmDeviceFd>, ()>,
     pub renderer: GlesRenderer,
     pub size: (i32, i32),
+    pub cursor_manager: crate::backend::cursor::CursorManager,
 }
 
 impl DrmDisplay {
@@ -51,7 +52,7 @@ impl DrmDisplay {
 
         let size = Size::from((self.size.0, self.size.1));
         let damage = Rectangle::from_size(size);
-        let elements = collect_render_elements(app, &mut self.renderer);
+        let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
 
         let mut frame = self
             .renderer
@@ -288,6 +289,7 @@ pub fn discover_and_init_drm_displays(
                 gbm_surface,
                 renderer,
                 size: (width, height),
+                cursor_manager: crate::backend::cursor::CursorManager::new(),
             });
         }
 
