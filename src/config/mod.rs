@@ -1,8 +1,13 @@
+pub mod plugins;
+
 use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
+pub use plugins::LuaPluginManager;
+
 use crate::dispatch::{Command, Event};
+use crate::layout::LayoutRegistry;
 use crate::state::{WindowId, WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher};
 
 /// Lua Configuration Runtime environment for truss.
@@ -303,9 +308,15 @@ impl LuaConfig {
         None
     }
 
-    /// Apply custom configuration values to dispatcher.
-    pub fn apply_to_dispatcher(&self, _dispatcher: &mut crate::dispatch::Dispatcher) {
-        // Layout and gap rules configured via Lua
+    /// Apply custom configuration values and sync Lua plugins to layout registry.
+    pub fn apply_to_dispatcher(&self, dispatcher: &mut crate::dispatch::Dispatcher) {
+        let _ = LuaPluginManager::register_layout_api(&self.lua, dispatcher);
+        LuaPluginManager::sync_lua_layouts(&self.lua, &mut dispatcher.layout_registry);
+    }
+
+    /// Sync layout plugins from Lua into layout registry
+    pub fn sync_layout_plugins(&self, registry: &mut LayoutRegistry) {
+        LuaPluginManager::sync_lua_layouts(&self.lua, registry);
     }
 
     /// Retrieve a global string/value for testing/debugging.

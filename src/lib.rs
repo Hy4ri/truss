@@ -11,7 +11,9 @@ pub mod protocols;
 pub mod state;
 
 pub use app::App;
-pub use backend::{OutputInfo, OutputManager, RenderManager, TtyBackend, DESKTOP_BG_COLOR};
+pub use backend::{
+    collect_render_elements, OutputInfo, OutputManager, RenderManager, TtyBackend, DESKTOP_BG_COLOR,
+};
 pub use bar::run_status_bar;
 pub use cli::{handle_msg_command, CliArgs, Subcommand};
 pub use config::LuaConfig;
@@ -21,7 +23,9 @@ pub use input::{
     PointerState,
 };
 pub use ipc::{IpcRequest, IpcResponse, IpcServer};
-pub use layout::{Layout, LayoutConfig, LayoutRegistry, MasterLayout, MonocleLayout};
+pub use layout::{
+    CustomLayout, GridLayout, Layout, LayoutConfig, LayoutRegistry, MasterLayout, MonocleLayout,
+};
 pub use state::{
     Rect, State, StateError, Window, WindowId, WindowRule, WindowRuleAction, WindowRuleManager,
     WindowRuleMatcher, Workspace,
