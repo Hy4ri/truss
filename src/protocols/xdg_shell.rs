@@ -58,6 +58,9 @@ impl XdgShellHandler for App {
             self.window_rules.evaluate_and_apply(win);
         }
 
+        // Focus new toplevel window by default
+        self.set_focused_window(Some(window_id));
+
         info!(
             "xdg_toplevel mapped: {:?} on workspace {}",
             window_id, self.state.active_workspace_id
@@ -147,6 +150,9 @@ impl XdgShellHandler for App {
             let _ = self.state.remove_window(id);
             info!("xdg_toplevel unmapped: {:?}", id);
             self.dispatcher.broadcast(&Event::WindowDestroyed { id });
+
+            let next_focus = self.state.active_workspace().focused_window;
+            self.set_focused_window(next_focus);
         }
     }
 }

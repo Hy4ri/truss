@@ -14,8 +14,7 @@ use tracing::info;
 
 use crate::{
     backend::drm::{discover_and_init_drm_displays, DrmDisplay},
-    dispatch::Command,
-    input::{Modifiers, PointerFocusTarget},
+    input::{Modifiers, PointerDragMode, PointerFocusTarget},
     App,
 };
 
@@ -141,14 +140,73 @@ impl TtyBackend {
                     let bounds = state.output_manager.primary_usable_area();
                     state.pointer_state.update_location(delta, bounds);
                     state.pointer_state.update_drag(&mut state.state);
+
+                    // Send configure to resized window if resizing
+                    if let PointerDragMode::Resize { window_id, .. } = state.pointer_state.drag {
+                        if let Some(surface) = state.surfaces.get(&window_id) {
+                            if let Some(win) = state.state.windows.get(&window_id) {
+                                surface.with_pending_state(|s| {
+                                    s.size = Some(
+                                        (win.geometry.width as i32, win.geometry.height as i32)
+                                            .into(),
+                                    );
+                                });
+                                surface.send_configure();
+                            }
+                        }
+                    }
+
+                    // Forward motion to client surface under pointer
+                    let target = state.pointer_state.find_target_at_location(&state.state);
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    let time = event.time_msec();
+                    let pos = state.pointer_state.location;
+                    if let Some(pointer) = state.seat.get_pointer() {
+                        match target {
+                            PointerFocusTarget::Window(win_id) => {
+                                if let (Some(win), Some(surface)) = (
+                                    state.state.windows.get(&win_id),
+                                    state.surfaces.get(&win_id),
+                                ) {
+                                    let rel_pos = smithay::utils::Point::from((
+                                        pos.x - win.geometry.x as f64,
+                                        pos.y - win.geometry.y as f64,
+                                    ));
+                                    pointer.motion(
+                                        state,
+                                        Some((surface.wl_surface().clone(), rel_pos)),
+                                        &smithay::input::pointer::MotionEvent {
+                                            location: rel_pos,
+                                            serial,
+                                            time,
+                                        },
+                                    );
+                                }
+                            }
+                            PointerFocusTarget::Background => {
+                                pointer.motion(
+                                    state,
+                                    None,
+                                    &smithay::input::pointer::MotionEvent {
+                                        location: pos,
+                                        serial,
+                                        time,
+                                    },
+                                );
+                            }
+                        }
+                    }
                 }
                 InputEvent::PointerButton { event } => {
                     let target = state.pointer_state.find_target_at_location(&state.state);
                     let btn = event.button_code();
                     let is_pressed = event.state() == ButtonState::Pressed;
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    let time = event.time_msec();
 
                     if is_pressed {
                         if let PointerFocusTarget::Window(win_id) = target {
+                            state.set_focused_window(Some(win_id));
                             if current_modifiers.logo {
                                 if let Some(win) = state.state.windows.get(&win_id) {
                                     let geom = win.geometry;
@@ -158,15 +216,33 @@ impl TtyBackend {
                                         state.pointer_state.start_drag_resize(win_id, geom);
                                     }
                                 }
-                            } else {
-                                let _ = state.dispatcher.dispatch(
-                                    &mut state.state,
-                                    Command::WindowFocus { id: win_id },
+                            } else if let Some(pointer) = state.seat.get_pointer() {
+                                pointer.button(
+                                    state,
+                                    &smithay::input::pointer::ButtonEvent {
+                                        button: btn,
+                                        state: ButtonState::Pressed,
+                                        serial,
+                                        time,
+                                    },
                                 );
                             }
+                        } else {
+                            state.set_focused_window(None);
                         }
                     } else {
                         state.pointer_state.end_drag();
+                        if let Some(pointer) = state.seat.get_pointer() {
+                            pointer.button(
+                                state,
+                                &smithay::input::pointer::ButtonEvent {
+                                    button: btn,
+                                    state: ButtonState::Released,
+                                    serial,
+                                    time,
+                                },
+                            );
+                        }
                     }
                 }
                 _ => {}

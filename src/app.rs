@@ -155,6 +155,44 @@ impl App {
         })
     }
 
+    /// Update focused window state, seat keyboard focus, and toplevel activation states.
+    pub fn set_focused_window(&mut self, window_id: Option<WindowId>) {
+        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+
+        if let Some(id) = window_id {
+            let _ = self.state.focus_window(id);
+
+            if let Some(surface) = self.surfaces.get(&id) {
+                let wl_surf = surface.wl_surface().clone();
+                if let Some(keyboard) = self.seat.get_keyboard() {
+                    keyboard.set_focus(self, Some(wl_surf), serial);
+                }
+            }
+        } else {
+            self.state.active_workspace_mut().focused_window = None;
+            if let Some(keyboard) = self.seat.get_keyboard() {
+                keyboard.set_focus(self, None, serial);
+            }
+        }
+
+        let focused = self.state.active_workspace().focused_window;
+        for (id, surface) in &self.surfaces {
+            let is_active = Some(*id) == focused;
+            surface.with_pending_state(|state| {
+                if is_active {
+                    state.states.set(
+                        smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
+                    );
+                } else {
+                    state.states.unset(
+                        smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State::Activated,
+                    );
+                }
+            });
+            surface.send_configure();
+        }
+    }
+
     /// Refresh and recalculate layouts for active workspaces across outputs.
     pub fn refresh_layout_and_space(&mut self) {
         // Cleanup dead popup trees periodically

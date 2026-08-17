@@ -24,8 +24,7 @@ use truss::{
     backend::TtyBackend,
     bar::run_status_bar,
     cli::{handle_msg_command, CliArgs, Subcommand},
-    dispatch::Command,
-    input::{Modifiers, PointerFocusTarget},
+    input::{Modifiers, PointerDragMode, PointerFocusTarget},
     protocols::compositor::ClientState,
     App,
 };
@@ -195,14 +194,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     state.pointer_state.set_location(pos);
                     state.pointer_state.update_drag(&mut state.state);
+
+                    // Send configure to resized window if resizing
+                    if let PointerDragMode::Resize { window_id, .. } = state.pointer_state.drag {
+                        if let Some(surface) = state.surfaces.get(&window_id) {
+                            if let Some(win) = state.state.windows.get(&window_id) {
+                                surface.with_pending_state(|s| {
+                                    s.size = Some(
+                                        (win.geometry.width as i32, win.geometry.height as i32)
+                                            .into(),
+                                    );
+                                });
+                                surface.send_configure();
+                            }
+                        }
+                    }
+
+                    // Forward motion to client surface under pointer
+                    let target = state.pointer_state.find_target_at_location(&state.state);
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    let time = event.time_msec();
+                    if let Some(pointer) = state.seat.get_pointer() {
+                        match target {
+                            PointerFocusTarget::Window(win_id) => {
+                                if let (Some(win), Some(surface)) = (
+                                    state.state.windows.get(&win_id),
+                                    state.surfaces.get(&win_id),
+                                ) {
+                                    let rel_pos = smithay::utils::Point::from((
+                                        pos.x - win.geometry.x as f64,
+                                        pos.y - win.geometry.y as f64,
+                                    ));
+                                    pointer.motion(
+                                        state,
+                                        Some((surface.wl_surface().clone(), rel_pos)),
+                                        &smithay::input::pointer::MotionEvent {
+                                            location: rel_pos,
+                                            serial,
+                                            time,
+                                        },
+                                    );
+                                }
+                            }
+                            PointerFocusTarget::Background => {
+                                pointer.motion(
+                                    state,
+                                    None,
+                                    &smithay::input::pointer::MotionEvent {
+                                        location: pos,
+                                        serial,
+                                        time,
+                                    },
+                                );
+                            }
+                        }
+                    }
                 }
                 WinitEvent::Input(InputEvent::PointerButton { event }) => {
                     let target = state.pointer_state.find_target_at_location(&state.state);
                     let btn = event.button_code();
                     let is_pressed = event.state() == ButtonState::Pressed;
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    let time = event.time_msec();
 
                     if is_pressed {
                         if let PointerFocusTarget::Window(win_id) = target {
+                            state.set_focused_window(Some(win_id));
                             if current_modifiers.logo {
                                 if let Some(win) = state.state.windows.get(&win_id) {
                                     let geom = win.geometry;
@@ -212,15 +269,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         state.pointer_state.start_drag_resize(win_id, geom);
                                     }
                                 }
-                            } else {
-                                let _ = state.dispatcher.dispatch(
-                                    &mut state.state,
-                                    Command::WindowFocus { id: win_id },
+                            } else if let Some(pointer) = state.seat.get_pointer() {
+                                pointer.button(
+                                    state,
+                                    &smithay::input::pointer::ButtonEvent {
+                                        button: btn,
+                                        state: ButtonState::Pressed,
+                                        serial,
+                                        time,
+                                    },
                                 );
                             }
+                        } else {
+                            state.set_focused_window(None);
                         }
                     } else {
                         state.pointer_state.end_drag();
+                        if let Some(pointer) = state.seat.get_pointer() {
+                            pointer.button(
+                                state,
+                                &smithay::input::pointer::ButtonEvent {
+                                    button: btn,
+                                    state: ButtonState::Released,
+                                    serial,
+                                    time,
+                                },
+                            );
+                        }
                     }
                 }
                 WinitEvent::CloseRequested => {
