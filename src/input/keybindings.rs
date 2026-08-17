@@ -219,10 +219,12 @@ impl Keybindings {
             }
             KeyAction::Spawn(cmd) => {
                 info!("Keybinding triggered spawn: {}", cmd);
+                let wayland_display =
+                    std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
                 std::process::Command::new("sh")
                     .arg("-c")
                     .arg(cmd)
-                    .env("WAYLAND_DISPLAY", "truss-0")
+                    .env("WAYLAND_DISPLAY", &wayland_display)
                     .spawn()
                     .map_err(|e| {
                         crate::dispatch::DispatchError::InvalidParams(format!(

@@ -41,16 +41,38 @@ impl WlrLayerShellHandler for App {
             let _ = layer_map.arrange();
 
             surface.with_pending_state(|state| {
-                let size = out
-                    .current_mode()
-                    .map(|m| (m.size.w, m.size.h).into())
-                    .unwrap_or((1920, 1080).into());
-                state.size = Some(size);
+                if state.size.is_none() {
+                    let size = layer_map
+                        .layer_geometry(&desktop_surface)
+                        .map(|g| (g.size.w, g.size.h).into())
+                        .unwrap_or_else(|| {
+                            out.current_mode()
+                                .map(|m| (m.size.w, m.size.h).into())
+                                .unwrap_or((1920, 1080).into())
+                        });
+                    state.size = Some(size);
+                }
             });
             surface.send_configure();
 
             self.refresh_layout_and_space();
         }
+    }
+
+    fn layer_destroyed(&mut self, surface: WlrLayerSurface) {
+        info!("wlr_layer_shell: layer surface destroyed");
+        for output in &self.output_manager.outputs {
+            let mut layer_map = layer_map_for_output(output);
+            let to_remove = layer_map
+                .layers()
+                .find(|l| l.wl_surface() == surface.wl_surface())
+                .cloned();
+            if let Some(l) = to_remove {
+                layer_map.unmap_layer(&l);
+            }
+            let _ = layer_map.arrange();
+        }
+        self.refresh_layout_and_space();
     }
 }
 

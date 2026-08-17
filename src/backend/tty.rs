@@ -158,45 +158,21 @@ impl TtyBackend {
                         }
                     }
 
-                    // Forward motion to client surface under pointer
-                    let target = state.pointer_state.find_target_at_location(&state.state);
+                    // Forward motion to client surface under pointer across all layers
+                    let pos = state.pointer_state.location;
+                    let surface_under = state.surface_under(pos);
                     let serial = smithay::utils::SERIAL_COUNTER.next_serial();
                     let time = event.time_msec();
-                    let pos = state.pointer_state.location;
                     if let Some(pointer) = state.seat.get_pointer() {
-                        match target {
-                            PointerFocusTarget::Window(win_id) => {
-                                if let (Some(win), Some(surface)) = (
-                                    state.state.windows.get(&win_id),
-                                    state.surfaces.get(&win_id),
-                                ) {
-                                    let win_origin = smithay::utils::Point::from((
-                                        win.geometry.x as f64,
-                                        win.geometry.y as f64,
-                                    ));
-                                    pointer.motion(
-                                        state,
-                                        Some((surface.wl_surface().clone(), win_origin)),
-                                        &smithay::input::pointer::MotionEvent {
-                                            location: pos,
-                                            serial,
-                                            time,
-                                        },
-                                    );
-                                }
-                            }
-                            PointerFocusTarget::Background => {
-                                pointer.motion(
-                                    state,
-                                    None,
-                                    &smithay::input::pointer::MotionEvent {
-                                        location: pos,
-                                        serial,
-                                        time,
-                                    },
-                                );
-                            }
-                        }
+                        pointer.motion(
+                            state,
+                            surface_under,
+                            &smithay::input::pointer::MotionEvent {
+                                location: pos,
+                                serial,
+                                time,
+                            },
+                        );
                         pointer.frame(state);
                     }
                 }
@@ -233,6 +209,18 @@ impl TtyBackend {
                             }
                         } else {
                             state.set_focused_window(None);
+                            if let Some(pointer) = state.seat.get_pointer() {
+                                pointer.button(
+                                    state,
+                                    &smithay::input::pointer::ButtonEvent {
+                                        button: btn,
+                                        state: ButtonState::Pressed,
+                                        serial,
+                                        time,
+                                    },
+                                );
+                                pointer.frame(state);
+                            }
                         }
                     } else {
                         state.pointer_state.end_drag();
@@ -248,6 +236,55 @@ impl TtyBackend {
                             );
                             pointer.frame(state);
                         }
+                    }
+                }
+                InputEvent::PointerAxis { event } => {
+                    use smithay::backend::input::PointerAxisEvent;
+                    use smithay::input::pointer::AxisFrame;
+
+                    let mut frame = AxisFrame::new(event.time_msec()).source(event.source());
+                    let horizontal_amount = event
+                        .amount(smithay::backend::input::Axis::Horizontal)
+                        .unwrap_or_else(|| {
+                            event
+                                .amount_v120(smithay::backend::input::Axis::Horizontal)
+                                .unwrap_or(0.0)
+                                * 15.0
+                                / 120.0
+                        });
+                    let vertical_amount = event
+                        .amount(smithay::backend::input::Axis::Vertical)
+                        .unwrap_or_else(|| {
+                            event
+                                .amount_v120(smithay::backend::input::Axis::Vertical)
+                                .unwrap_or(0.0)
+                                * 15.0
+                                / 120.0
+                        });
+
+                    let horizontal_amount_v120 =
+                        event.amount_v120(smithay::backend::input::Axis::Horizontal);
+                    let vertical_amount_v120 =
+                        event.amount_v120(smithay::backend::input::Axis::Vertical);
+
+                    if horizontal_amount != 0.0 || horizontal_amount_v120.is_some() {
+                        let axis = smithay::backend::input::Axis::Horizontal;
+                        frame = frame.value(axis, horizontal_amount);
+                        if let Some(v120) = horizontal_amount_v120 {
+                            frame = frame.v120(axis, v120 as i32);
+                        }
+                    }
+                    if vertical_amount != 0.0 || vertical_amount_v120.is_some() {
+                        let axis = smithay::backend::input::Axis::Vertical;
+                        frame = frame.value(axis, vertical_amount);
+                        if let Some(v120) = vertical_amount_v120 {
+                            frame = frame.v120(axis, v120 as i32);
+                        }
+                    }
+
+                    if let Some(pointer) = state.seat.get_pointer() {
+                        pointer.axis(state, frame);
+                        pointer.frame(state);
                     }
                 }
                 _ => {}
