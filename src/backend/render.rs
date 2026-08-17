@@ -7,6 +7,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::layer_map_for_output;
 use smithay::input::pointer::CursorImageStatus;
 use smithay::render_elements;
+use smithay::wayland::shell::wlr_layer::Layer as WlrLayer;
 
 use crate::backend::cursor::CursorManager;
 use crate::App;
@@ -19,8 +20,9 @@ render_elements! {
     Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
 }
 
-/// Extract all render elements (layer-shell background, bottom, toplevel windows, top, overlay, cursor)
-/// for rendering to the active output framebuffer in proper Wayland layer order.
+/// Extract all render elements (cursor, overlay, top, popups, toplevel windows, bottom, background)
+/// for rendering to the active output framebuffer in FRONT-TO-BACK (top-to-bottom) order
+/// as required by Smithay's `draw_render_elements` and `OutputDamageTracker`.
 pub fn collect_render_elements(
     app: &App,
     renderer: &mut GlesRenderer,
@@ -28,75 +30,7 @@ pub fn collect_render_elements(
 ) -> Vec<TrussRenderElement> {
     let mut elements = Vec::new();
 
-    // 1. Layer Shell Surfaces: non-popup background/bottom layers
-    for output in &app.output_manager.outputs {
-        let layer_map = layer_map_for_output(output);
-
-        for surface in layer_map.layers() {
-            if let Some(loc) = layer_map
-                .layer_geometry(surface)
-                .map(|g| (g.loc.x, g.loc.y))
-            {
-                let layer_elements = render_elements_from_surface_tree(
-                    renderer,
-                    surface.wl_surface(),
-                    loc,
-                    1.0,
-                    1.0,
-                    Kind::Unspecified,
-                );
-                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-            }
-        }
-    }
-
-    // 2. Normal Toplevel Windows & Popups
-    for surface in app.xdg_shell_state.toplevel_surfaces() {
-        let win_entry = app
-            .surfaces
-            .iter()
-            .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-            .and_then(|(id, _)| app.state.windows.get(id));
-
-        // Skip rendering windows belonging to inactive workspaces
-        if let Some(win) = win_entry {
-            if win.workspace_id != app.state.active_workspace_id {
-                continue;
-            }
-        }
-
-        let win_geom = win_entry
-            .map(|w| (w.geometry.x, w.geometry.y))
-            .unwrap_or((0, 0));
-
-        let win_elements = render_elements_from_surface_tree(
-            renderer,
-            surface.wl_surface(),
-            win_geom,
-            1.0,
-            1.0,
-            Kind::Unspecified,
-        );
-        elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
-
-        // Render associated popups (context menus, dropdowns, tooltips)
-        for (popup, popup_loc) in
-            smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
-        {
-            let popup_abs_pos = (win_geom.0 + popup_loc.x, win_geom.1 + popup_loc.y);
-            let popup_elements = render_elements_from_surface_tree(
-                renderer,
-                popup.wl_surface(),
-                popup_abs_pos,
-                1.0,
-                1.0,
-                Kind::Unspecified,
-            );
-            elements.extend(popup_elements.into_iter().map(TrussRenderElement::Surface));
-        }
-    }
-
-    // 3. Cursor (rendered LAST = on top of everything)
+    // 1. Cursor (top-most layer, rendered on top of everything)
     let pointer_loc = app.pointer_state.location;
     let cursor_pos = (pointer_loc.x as i32, pointer_loc.y as i32);
 
@@ -120,6 +54,102 @@ pub fn collect_render_elements(
             // Use xcursor theme cursor or fallback
             if let Some(cursor_element) = cursor_manager.render_named_cursor(renderer, cursor_pos) {
                 elements.push(TrussRenderElement::Cursor(cursor_element));
+            }
+        }
+    }
+
+    // 2. Layer Shell Surfaces: Overlay & Top layers
+    for output in &app.output_manager.outputs {
+        let layer_map = layer_map_for_output(output);
+
+        for surface in layer_map
+            .layers_on(WlrLayer::Overlay)
+            .chain(layer_map.layers_on(WlrLayer::Top))
+        {
+            if let Some(loc) = layer_map
+                .layer_geometry(surface)
+                .map(|g| (g.loc.x, g.loc.y))
+            {
+                let layer_elements = render_elements_from_surface_tree(
+                    renderer,
+                    surface.wl_surface(),
+                    loc,
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                );
+                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
+            }
+        }
+    }
+
+    // 3. Normal Toplevel Windows & Popups on active workspace
+    for surface in app.xdg_shell_state.toplevel_surfaces() {
+        let win_entry = app
+            .surfaces
+            .iter()
+            .find(|(_, s)| s.wl_surface() == surface.wl_surface())
+            .and_then(|(id, _)| app.state.windows.get(id));
+
+        // Skip rendering windows belonging to inactive workspaces
+        if let Some(win) = win_entry {
+            if win.workspace_id != app.state.active_workspace_id {
+                continue;
+            }
+        }
+
+        let win_geom = win_entry
+            .map(|w| (w.geometry.x, w.geometry.y))
+            .unwrap_or((0, 0));
+
+        // Render associated popups first (above parent windows)
+        for (popup, popup_loc) in
+            smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
+        {
+            let popup_abs_pos = (win_geom.0 + popup_loc.x, win_geom.1 + popup_loc.y);
+            let popup_elements = render_elements_from_surface_tree(
+                renderer,
+                popup.wl_surface(),
+                popup_abs_pos,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(popup_elements.into_iter().map(TrussRenderElement::Surface));
+        }
+
+        let win_elements = render_elements_from_surface_tree(
+            renderer,
+            surface.wl_surface(),
+            win_geom,
+            1.0,
+            1.0,
+            Kind::Unspecified,
+        );
+        elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
+    }
+
+    // 4. Layer Shell Surfaces: Bottom & Background layers
+    for output in &app.output_manager.outputs {
+        let layer_map = layer_map_for_output(output);
+
+        for surface in layer_map
+            .layers_on(WlrLayer::Bottom)
+            .chain(layer_map.layers_on(WlrLayer::Background))
+        {
+            if let Some(loc) = layer_map
+                .layer_geometry(surface)
+                .map(|g| (g.loc.x, g.loc.y))
+            {
+                let layer_elements = render_elements_from_surface_tree(
+                    renderer,
+                    surface.wl_surface(),
+                    loc,
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                );
+                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
             }
         }
     }
