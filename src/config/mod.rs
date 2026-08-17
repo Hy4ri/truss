@@ -255,6 +255,7 @@ impl LuaConfig {
             Event::WindowDestroyed { .. } => "window.destroyed",
             Event::WindowFocused { .. } => "window.focused",
             Event::WindowMovedWorkspace { .. } => "window.moved_workspace",
+            Event::WindowStateChanged { .. } => "window.state_changed",
             Event::LayoutChanged { .. } => "layout.changed",
             Event::LayoutConfigChanged { .. } => "layout.config_changed",
             Event::CompositorQuitting => "compositor.quitting",

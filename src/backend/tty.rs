@@ -10,6 +10,7 @@ use smithay::{
     input::keyboard::FilterResult,
     reexports::{calloop::LoopHandle, input::Libinput, wayland_server::DisplayHandle},
 };
+use std::sync::mpsc::{channel, Receiver};
 use tracing::info;
 
 use crate::{
@@ -22,6 +23,7 @@ use crate::{
 pub struct TtyBackend {
     pub session: LibSeatSession,
     pub drm_displays: Vec<DrmDisplay>,
+    vblank_rx: Receiver<smithay::reexports::drm::control::crtc::Handle>,
 }
 
 impl TtyBackend {
@@ -293,8 +295,9 @@ impl TtyBackend {
 
         // Initialize DRM/KMS hardware display scanout
         let mut session_for_drm = session.clone();
+        let (vblank_tx, vblank_rx) = channel();
         let drm_displays =
-            discover_and_init_drm_displays(&mut session_for_drm, loop_handle, dh, app);
+            discover_and_init_drm_displays(&mut session_for_drm, loop_handle, dh, app, vblank_tx);
 
         // Replace the phantom headless output
         app.output_manager.remove_output("HEADLESS-1");
@@ -317,6 +320,27 @@ impl TtyBackend {
         Ok(Self {
             session,
             drm_displays,
+            vblank_rx,
         })
+    }
+
+    /// Complete queued scanout only after the corresponding DRM vblank.
+    pub fn handle_vblanks(&mut self) {
+        while let Ok(crtc) = self.vblank_rx.try_recv() {
+            if let Some(display) = self.display_for_crtc_mut(crtc) {
+                if let Err(error) = display.frame_submitted() {
+                    tracing::warn!("truss: failed to complete DRM frame: {error}");
+                }
+            }
+        }
+    }
+
+    fn display_for_crtc_mut(
+        &mut self,
+        crtc: smithay::reexports::drm::control::crtc::Handle,
+    ) -> Option<&mut DrmDisplay> {
+        self.drm_displays
+            .iter_mut()
+            .find(|display| display.crtc == crtc)
     }
 }

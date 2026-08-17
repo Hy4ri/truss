@@ -24,7 +24,7 @@ use std::{
         Arc,
     },
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     backend::{OutputManager, RenderManager},
@@ -102,13 +102,13 @@ impl App {
 
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
+        let mut window_rules = WindowRuleManager::new();
 
         if let Some(config_path) = LuaConfig::find_default_config_path() {
             info!("Loading configuration from {}", config_path.display());
             if let Ok(()) = lua_config.load_file(&config_path) {
                 lua_config.apply_to_dispatcher(&mut dispatcher);
-                let mut rules_mgr = WindowRuleManager::new();
-                lua_config.apply_rules_to_manager(&mut rules_mgr);
+                lua_config.apply_rules_to_manager(&mut window_rules);
             }
         }
 
@@ -143,7 +143,7 @@ impl App {
             pointer_state: PointerState::new(),
             cursor_status: CursorImageStatus::default_named(),
             keybindings: Keybindings::new_default(),
-            window_rules: WindowRuleManager::new(),
+            window_rules,
             output_manager,
             render_manager,
             lua_config,
@@ -182,6 +182,59 @@ impl App {
         self.refresh_layout_and_space();
     }
 
+    /// Apply matching rules and keep the state workspace indexes in sync.
+    ///
+    /// Rules operate on a `Window`, while `State` also stores a per-workspace
+    /// window list. Moving the window through `State` after evaluating rules is
+    /// therefore essential: changing only `Window::workspace_id` leaves a
+    /// window visible on the wrong workspace.
+    pub fn apply_window_rules(&mut self, window_id: WindowId) {
+        let original_workspace = match self.state.windows.get(&window_id) {
+            Some(window) => window.workspace_id,
+            None => return,
+        };
+
+        if let Some(window) = self.state.windows.get_mut(&window_id) {
+            self.window_rules.evaluate_and_apply(window);
+        }
+
+        let requested_workspace = match self.state.windows.get(&window_id) {
+            Some(window) => window.workspace_id,
+            None => return,
+        };
+
+        if requested_workspace == original_workspace {
+            return;
+        }
+
+        if !self.state.workspaces.contains_key(&requested_workspace) {
+            warn!(
+                "Ignoring window rule for {:?}: workspace {} does not exist",
+                window_id, requested_workspace
+            );
+            if let Some(window) = self.state.windows.get_mut(&window_id) {
+                window.workspace_id = original_workspace;
+            }
+            return;
+        }
+
+        // `move_window_to_workspace` determines the source workspace from the
+        // window itself, so restore it before performing the atomic move.
+        if let Some(window) = self.state.windows.get_mut(&window_id) {
+            window.workspace_id = original_workspace;
+        }
+        let _ = self
+            .state
+            .move_window_to_workspace(window_id, requested_workspace);
+    }
+
+    /// Deliver dispatcher events to Lua hooks without blocking the compositor.
+    pub fn process_pending_events(&self) {
+        for event in self.event_rx.try_iter() {
+            self.lua_config.handle_event(&event);
+        }
+    }
+
     /// Refresh and recalculate layouts for active workspaces across outputs.
     pub fn refresh_layout_and_space(&mut self) {
         // Cleanup dead popup trees periodically
@@ -194,6 +247,8 @@ impl App {
         let active_ws = self.state.active_workspace_id;
         self.dispatcher
             .recalculate_workspace_layout(&mut self.state, active_ws, area);
+        self.render_manager
+            .sync_windows(&self.state, &self.surfaces);
 
         // Update toplevel window surface states and configure sizes
         let focused = self.state.active_workspace().focused_window;

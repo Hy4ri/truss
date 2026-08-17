@@ -45,21 +45,26 @@ impl XdgShellHandler for App {
         self.surfaces.insert(window_id, surface);
 
         // Evaluate and apply declarative window rules
-        if let Some(win) = self.state.windows.get_mut(&window_id) {
-            self.window_rules.evaluate_and_apply(win);
-        }
+        self.apply_window_rules(window_id);
 
         // Focus new toplevel window by default (this will recalculate layout & configure surfaces)
         self.set_focused_window(Some(window_id));
 
+        let workspace_id = self
+            .state
+            .windows
+            .get(&window_id)
+            .map(|window| window.workspace_id)
+            .unwrap_or(self.state.active_workspace_id);
+
         info!(
             "xdg_toplevel mapped: {:?} on workspace {}",
-            window_id, self.state.active_workspace_id
+            window_id, workspace_id
         );
 
         self.dispatcher.broadcast(&Event::WindowCreated {
             id: window_id,
-            workspace_id: self.state.active_workspace_id,
+            workspace_id,
         });
     }
 
@@ -82,9 +87,8 @@ impl XdgShellHandler for App {
                     }
                 }
             });
-            if let Some(win) = self.state.windows.get_mut(&id) {
-                self.window_rules.evaluate_and_apply(win);
-            }
+            self.apply_window_rules(id);
+            self.refresh_layout_and_space();
         }
     }
 

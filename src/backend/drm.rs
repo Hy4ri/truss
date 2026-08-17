@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::mpsc::Sender};
 
 use smithay::{
     backend::{
@@ -14,7 +14,7 @@ use smithay::{
     output::Output,
     reexports::{
         calloop::LoopHandle,
-        drm::control::{connector, Device as ControlDevice},
+        drm::control::{connector, crtc, Device as ControlDevice},
         rustix::fs::OFlags,
         wayland_server::DisplayHandle,
     },
@@ -30,6 +30,7 @@ use crate::{
 /// A physical display output driven directly via DRM/KMS and GBM framebuffer page-flipping.
 pub struct DrmDisplay {
     pub name: String,
+    pub crtc: crtc::Handle,
     pub output: Output,
     pub gbm_surface: GbmBufferedSurface<GbmAllocator<DrmDeviceFd>, ()>,
     pub renderer: GlesRenderer,
@@ -67,9 +68,17 @@ impl DrmDisplay {
         self.gbm_surface
             .queue_buffer(None, None, ())
             .map_err(|e| format!("DRM queue_buffer failed: {e}"))?;
-        let _ = self.gbm_surface.frame_submitted();
-
         Ok(())
+    }
+
+    /// Release the queued GBM buffer only after the DRM page-flip/vblank that
+    /// displayed it. Calling this before the event exhausts the swapchain or
+    /// causes repeated scanout of stale buffers.
+    pub fn frame_submitted(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.gbm_surface
+            .frame_submitted()
+            .map(|_| ())
+            .map_err(|e| format!("DRM frame submission completion failed: {e}").into())
     }
 
     /// Reset DRM surface state after VT switch resume.
@@ -84,17 +93,32 @@ pub fn discover_and_init_drm_displays(
     loop_handle: &LoopHandle<'static, App>,
     dh: &DisplayHandle,
     app: &mut App,
+    vblank_tx: Sender<crtc::Handle>,
 ) -> Vec<DrmDisplay> {
     let mut displays = Vec::new();
 
-    // Check candidate DRM cards: prefer card1 (integrated GPU) or card0 (discrete GPU)
-    let candidate_cards = ["/dev/dri/card1", "/dev/dri/card0", "/dev/dri/card2"];
+    // Discover every DRM primary node. GPU numbering is not stable: systems
+    // with USB/display GPUs or hybrid graphics often expose the active card as
+    // card3 or higher.
+    let mut candidate_cards: Vec<PathBuf> = std::fs::read_dir("/dev/dri")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.strip_prefix("card").is_some_and(|suffix| {
+                        !suffix.is_empty() && suffix.chars().all(char::is_numeric)
+                    })
+                })
+        })
+        .collect();
+    candidate_cards.sort();
 
-    for card_path in candidate_cards {
-        let path = PathBuf::from(card_path);
-        if !path.exists() {
-            continue;
-        }
+    for path in candidate_cards {
+        let card_path = path.display();
 
         info!("truss: probing DRM card node at {}", card_path);
         let owned_fd = match session.open(&path, OFlags::RDWR | OFlags::CLOEXEC) {
@@ -284,6 +308,7 @@ pub fn discover_and_init_drm_displays(
 
             displays.push(DrmDisplay {
                 name: conn_name,
+                crtc: crtc_handle,
                 damage_tracker: OutputDamageTracker::from_output(&output),
                 output,
                 gbm_surface,
@@ -294,9 +319,11 @@ pub fn discover_and_init_drm_displays(
         }
 
         // Register DRM page flip notifier in Calloop event loop
+        let event_tx = vblank_tx.clone();
         let _ = loop_handle.insert_source(notifier, move |event, _, _state: &mut App| {
             if let DrmEvent::VBlank(_crtc) = event {
-                // Pulse frame callbacks on vblank
+                // A queued GBM buffer may be released only after this event.
+                let _ = event_tx.send(_crtc);
             }
         });
     }

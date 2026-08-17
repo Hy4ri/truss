@@ -21,6 +21,13 @@ pub enum Event {
     #[serde(rename = "window.moved_workspace")]
     WindowMovedWorkspace { id: WindowId, workspace_id: u32 },
 
+    #[serde(rename = "window.state_changed")]
+    WindowStateChanged {
+        id: WindowId,
+        floating: bool,
+        fullscreen: bool,
+    },
+
     #[serde(rename = "layout.changed")]
     LayoutChanged { workspace_id: u32, layout: String },
 

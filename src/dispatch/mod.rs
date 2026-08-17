@@ -170,7 +170,7 @@ impl Dispatcher {
                         None => return Ok(DispatchResult::Ok),
                     },
                 };
-                let _ = state.remove_window(win_id);
+                state.remove_window(win_id)?;
                 self.broadcast(&Event::WindowDestroyed { id: win_id });
                 Ok(DispatchResult::Ok)
             }
@@ -184,6 +184,15 @@ impl Dispatcher {
                     },
                 };
                 state.toggle_floating(win_id)?;
+                let window = state
+                    .windows
+                    .get(&win_id)
+                    .expect("window was just validated");
+                self.broadcast(&Event::WindowStateChanged {
+                    id: win_id,
+                    floating: window.floating,
+                    fullscreen: window.fullscreen,
+                });
                 Ok(DispatchResult::Ok)
             }
 
@@ -196,15 +205,29 @@ impl Dispatcher {
                     },
                 };
                 state.toggle_fullscreen(win_id)?;
+                let window = state
+                    .windows
+                    .get(&win_id)
+                    .expect("window was just validated");
+                self.broadcast(&Event::WindowStateChanged {
+                    id: win_id,
+                    floating: window.floating,
+                    fullscreen: window.fullscreen,
+                });
                 Ok(DispatchResult::Ok)
             }
 
             Command::Spawn { command } => {
-                let _ = std::process::Command::new("sh")
+                let wayland_display =
+                    std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
+                std::process::Command::new("sh")
                     .arg("-c")
                     .arg(&command)
-                    .env("WAYLAND_DISPLAY", "truss-0")
-                    .spawn();
+                    .env("WAYLAND_DISPLAY", wayland_display)
+                    .spawn()
+                    .map_err(|e| {
+                        DispatchError::InvalidParams(format!("Failed to spawn {command}: {e}"))
+                    })?;
                 Ok(DispatchResult::Ok)
             }
 
@@ -228,6 +251,11 @@ impl Dispatcher {
             }
 
             Command::LayoutSet { layout } => {
+                if self.layout_registry.get(&layout).is_none() {
+                    return Err(DispatchError::InvalidParams(format!(
+                        "Unknown layout '{layout}'"
+                    )));
+                }
                 let ws_id = state.active_workspace_id;
                 let ws = state.active_workspace_mut();
                 ws.layout = layout.clone();
@@ -239,6 +267,9 @@ impl Dispatcher {
             }
 
             Command::LayoutSetGap { gap } => {
+                // Keep layout arithmetic safely inside signed compositor
+                // coordinates even for malformed IPC input.
+                let gap = gap.min(4_096);
                 self.layout_config.gap = gap;
                 self.broadcast(&Event::LayoutConfigChanged {
                     gap: Some(gap),
@@ -248,6 +279,11 @@ impl Dispatcher {
             }
 
             Command::LayoutSetRatio { ratio } => {
+                if !ratio.is_finite() {
+                    return Err(DispatchError::InvalidParams(
+                        "Master ratio must be a finite number".into(),
+                    ));
+                }
                 let clamped = ratio.clamp(0.1, 0.9);
                 self.layout_config.master_ratio = clamped;
                 self.broadcast(&Event::LayoutConfigChanged {

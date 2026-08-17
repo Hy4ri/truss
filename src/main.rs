@@ -402,6 +402,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             event_loop.dispatch(Duration::from_millis(5), &mut app)?;
+            app.process_pending_events();
             display.dispatch_clients(&mut app)?;
             display.flush_clients()?;
         }
@@ -450,6 +451,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     event_loop.dispatch(Duration::from_millis(5), &mut app)?;
+                    tty_backend.handle_vblanks();
+                    app.process_pending_events();
                     display.dispatch_clients(&mut app)?;
                     display.flush_clients()?;
                 }
@@ -464,6 +467,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 while app.is_running() {
                     event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+                    app.process_pending_events();
                     display.dispatch_clients(&mut app)?;
                     display.flush_clients()?;
                 }
@@ -479,6 +483,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         while app.is_running() {
             event_loop.dispatch(Duration::from_millis(10), &mut app)?;
+            app.process_pending_events();
             display.dispatch_clients(&mut app)?;
             display.flush_clients()?;
         }

@@ -2,6 +2,7 @@ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement
 use smithay::backend::renderer::element::surface::{
     render_elements_from_surface_tree, WaylandSurfaceRenderElement,
 };
+use smithay::backend::renderer::element::utils::CropRenderElement;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::layer_map_for_output;
@@ -17,6 +18,7 @@ use crate::App;
 render_elements! {
     pub TrussRenderElement<=GlesRenderer>;
     Surface=WaylandSurfaceRenderElement<GlesRenderer>,
+    CroppedSurface=CropRenderElement<WaylandSurfaceRenderElement<GlesRenderer>>,
     Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
 }
 
@@ -83,24 +85,18 @@ pub fn collect_render_elements(
         }
     }
 
-    // 3. Normal Toplevel Windows & Popups on active workspace
-    for surface in app.xdg_shell_state.toplevel_surfaces() {
-        let win_entry = app
-            .surfaces
-            .iter()
-            .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-            .and_then(|(id, _)| app.state.windows.get(id));
+    // 3. Normal toplevel windows and popups in layout order. The workspace
+    // list is the source of truth for master/stack ordering; iterating all XDG
+    // surfaces here could render an unmapped or stale surface at (0, 0).
+    for &window_id in &app.state.active_workspace().windows {
+        let (Some(surface), Some(window)) = (
+            app.surfaces.get(&window_id),
+            app.state.windows.get(&window_id),
+        ) else {
+            continue;
+        };
 
-        // Skip rendering windows belonging to inactive workspaces
-        if let Some(win) = win_entry {
-            if win.workspace_id != app.state.active_workspace_id {
-                continue;
-            }
-        }
-
-        let win_geom = win_entry
-            .map(|w| (w.geometry.x, w.geometry.y))
-            .unwrap_or((0, 0));
+        let win_geom = (window.geometry.x, window.geometry.y);
 
         // Render associated popups first (above parent windows)
         for (popup, popup_loc) in
@@ -126,7 +122,20 @@ pub fn collect_render_elements(
             1.0,
             Kind::Unspecified,
         );
-        elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
+        // A client is allowed to keep its old buffer until it acknowledges the
+        // resize configure. Crop it to the assigned tile meanwhile, otherwise
+        // an older master window can visually remain full-screen and cover the
+        // stack after another application opens.
+        let tile = smithay::utils::Rectangle::new(
+            win_geom.into(),
+            (window.geometry.width as i32, window.geometry.height as i32).into(),
+        );
+        elements.extend(
+            win_elements
+                .into_iter()
+                .filter_map(|element| CropRenderElement::from_element(element, 1.0, tile))
+                .map(TrussRenderElement::CroppedSurface),
+        );
     }
 
     // 4. Layer Shell Surfaces: Bottom & Background layers
