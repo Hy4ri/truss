@@ -18,10 +18,10 @@ fn test_vt_switch_keysym_calculation() {
 
     // KEY_F1 (0xffbe) to KEY_F12 (0xffc9)
     for vt in 1..=12 {
-        let sym = 0xffbe + (vt - 1);
+        let sym: u32 = 0xffbe + (vt - 1);
         assert!((0xffbe..=0xffc9).contains(&sym));
         let calculated_vt = (sym - 0xffbe + 1) as i32;
-        assert_eq!(calculated_vt, vt);
+        assert_eq!(calculated_vt, vt as i32);
     }
 }
 
