@@ -268,7 +268,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(_tty_backend) => {
                 info!("truss: running directly on TTY (libseat + libinput active)");
                 info!("truss: Ready! Press Super+Return to spawn foot, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
-                info!("truss: Press Ctrl+Alt+F1..F12 to switch VTs, or Super+Shift+Q to exit cleanly");
+                info!(
+                    "truss: Press Ctrl+Alt+F1..F12 to switch VTs, or Super+Shift+Q to exit cleanly"
+                );
 
                 let start_time = std::time::Instant::now();
                 let default_output = app

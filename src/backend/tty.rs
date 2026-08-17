@@ -87,7 +87,10 @@ impl TtyBackend {
                                 let sym = handle.modified_sym().raw();
 
                                 // VT Switching escape hatch: Ctrl + Alt + F1..F12 (0xffbe..=0xffc9)
-                                if current_modifiers.ctrl && current_modifiers.alt && (0xffbe..=0xffc9).contains(&sym) {
+                                if current_modifiers.ctrl
+                                    && current_modifiers.alt
+                                    && (0xffbe..=0xffc9).contains(&sym)
+                                {
                                     let vt = (sym - 0xffbe + 1) as i32;
                                     info!("truss: switching to VT {vt} (Ctrl+Alt+F{vt})");
                                     if let Err(e) = session_for_vt.change_vt(vt) {
