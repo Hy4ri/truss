@@ -8,10 +8,7 @@ use smithay::{
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
     },
     input::keyboard::FilterResult,
-    reexports::{
-        calloop::LoopHandle, input::Libinput,
-        wayland_server::DisplayHandle,
-    },
+    reexports::{calloop::LoopHandle, input::Libinput, wayland_server::DisplayHandle},
 };
 use tracing::info;
 
