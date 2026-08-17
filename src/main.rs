@@ -167,9 +167,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     logo: mods.logo,
                                 };
                                 let sym = handle.modified_sym().raw();
+                                let raw_sym =
+                                    handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
                                 if let Some(action) = data
                                     .keybindings
                                     .match_action(current_modifiers, sym)
+                                    .or_else(|| {
+                                        data.keybindings.match_action(current_modifiers, raw_sym)
+                                    })
                                     .cloned()
                                 {
                                     let _ = data.keybindings.execute_action(

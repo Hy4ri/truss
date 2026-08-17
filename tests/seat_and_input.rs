@@ -1,8 +1,8 @@
 use smithay::utils::Point;
 use truss::dispatch::{Command, Direction, DispatchResult, Dispatcher};
 use truss::input::{
-    KeyAction, KeyPattern, Keybindings, Modifiers, PointerDragMode, PointerFocusTarget,
-    PointerState,
+    parse_vt_switch, KeyAction, KeyPattern, Keybindings, Modifiers, PointerDragMode,
+    PointerFocusTarget, PointerState,
 };
 use truss::state::{Rect, State};
 
@@ -14,15 +14,32 @@ fn test_vt_switch_keysym_calculation() {
         shift: false,
         logo: false,
     };
-    assert!(mods.ctrl && mods.alt);
 
-    // KEY_F1 (0xffbe) to KEY_F12 (0xffc9)
+    // 1. XKB XF86Switch_VT_1..12 keysyms (0x1008FE01..=0x1008FE0C)
+    for vt in 1..=12 {
+        let sym: u32 = 0x1008_fe01 + (vt - 1);
+        let calculated_vt = parse_vt_switch(Modifiers::NONE, sym, sym, 0);
+        assert_eq!(calculated_vt, Some(vt as i32));
+    }
+
+    // 2. Ctrl + Alt + KEY_F1 (0xffbe) to KEY_F12 (0xffc9)
     for vt in 1..=12 {
         let sym: u32 = 0xffbe + (vt - 1);
-        assert!((0xffbe..=0xffc9).contains(&sym));
-        let calculated_vt = (sym - 0xffbe + 1) as i32;
-        assert_eq!(calculated_vt, vt as i32);
+        let calculated_vt = parse_vt_switch(mods, sym, sym, 0);
+        assert_eq!(calculated_vt, Some(vt as i32));
     }
+
+    // 3. Ctrl + Alt + evdev keycodes (59..=68 for F1-F10, 87 for F11, 88 for F12)
+    for vt in 1..=10 {
+        let code = 59 + (vt - 1);
+        let calculated_vt = parse_vt_switch(mods, 0, 0, code);
+        assert_eq!(calculated_vt, Some(vt as i32));
+    }
+    assert_eq!(parse_vt_switch(mods, 0, 0, 87), Some(11));
+    assert_eq!(parse_vt_switch(mods, 0, 0, 88), Some(12));
+
+    // 4. Inactive modifiers should return None for standard F1 keysym or evdev keycode
+    assert_eq!(parse_vt_switch(Modifiers::NONE, 0xffbe, 0xffbe, 59), None);
 }
 
 #[test]
@@ -33,17 +50,29 @@ fn test_default_keybindings_match() {
     let action_return = kb.match_action(Modifiers::SUPER, 0xff0d);
     assert_eq!(action_return, Some(&KeyAction::Spawn("foot".into())));
 
-    // Super + Shift + Q -> CompositorQuit
-    let action_quit = kb.match_action(Modifiers::SUPER_SHIFT, 0x0071);
+    // Super + Shift + Q -> CompositorQuit (matching both lowercase 0x71 and uppercase 0x51)
+    let action_quit_lower = kb.match_action(Modifiers::SUPER_SHIFT, 0x0071);
     assert_eq!(
-        action_quit,
+        action_quit_lower,
+        Some(&KeyAction::Dispatch(Command::CompositorQuit))
+    );
+    let action_quit_upper = kb.match_action(Modifiers::SUPER_SHIFT, 0x0051);
+    assert_eq!(
+        action_quit_upper,
         Some(&KeyAction::Dispatch(Command::CompositorQuit))
     );
 
-    // Super + J -> WindowFocusDir(Next)
-    let action_j = kb.match_action(Modifiers::SUPER, 0x006a);
+    // Super + J / j -> WindowFocusDir(Next)
+    let action_j_lower = kb.match_action(Modifiers::SUPER, 0x006a);
     assert_eq!(
-        action_j,
+        action_j_lower,
+        Some(&KeyAction::Dispatch(Command::WindowFocusDir {
+            direction: Direction::Next
+        }))
+    );
+    let action_j_upper = kb.match_action(Modifiers::SUPER, 0x004a);
+    assert_eq!(
+        action_j_upper,
         Some(&KeyAction::Dispatch(Command::WindowFocusDir {
             direction: Direction::Next
         }))

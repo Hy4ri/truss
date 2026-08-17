@@ -85,13 +85,16 @@ impl TtyBackend {
                                     logo: mods.logo,
                                 };
                                 let sym = handle.modified_sym().raw();
+                                let raw_sym =
+                                    handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
 
-                                // VT Switching escape hatch: Ctrl + Alt + F1..F12 (0xffbe..=0xffc9)
-                                if current_modifiers.ctrl
-                                    && current_modifiers.alt
-                                    && (0xffbe..=0xffc9).contains(&sym)
-                                {
-                                    let vt = (sym - 0xffbe + 1) as i32;
+                                // VT Switching escape hatch: XF86Switch_VT_1..12, Ctrl+Alt+F1..12, or evdev keycodes
+                                if let Some(vt) = crate::input::parse_vt_switch(
+                                    current_modifiers,
+                                    sym,
+                                    raw_sym,
+                                    key_code.into(),
+                                ) {
                                     info!("truss: switching to VT {vt} (Ctrl+Alt+F{vt})");
                                     if let Err(e) = session_for_vt.change_vt(vt) {
                                         tracing::warn!("truss: failed to switch to VT {vt}: {e}");
@@ -102,6 +105,9 @@ impl TtyBackend {
                                 if let Some(action) = data
                                     .keybindings
                                     .match_action(current_modifiers, sym)
+                                    .or_else(|| {
+                                        data.keybindings.match_action(current_modifiers, raw_sym)
+                                    })
                                     .cloned()
                                 {
                                     let _ = data.keybindings.execute_action(
