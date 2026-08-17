@@ -129,6 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start_time = std::time::Instant::now();
         let mut current_modifiers = Modifiers::NONE;
         let mut cursor_manager = truss::backend::CursorManager::new();
+        let output_for_winit = default_output.clone();
 
         loop_handle.insert_source(
             winit_event_loop,
@@ -302,6 +303,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             pointer.frame(state);
                         }
                     }
+                }
+                WinitEvent::Resized { size, .. } => {
+                    let mode = smithay::output::Mode {
+                        size: (size.w, size.h).into(),
+                        refresh: 60_000,
+                    };
+                    output_for_winit.change_current_state(Some(mode), None, None, None);
+                    output_for_winit.set_preferred(mode);
+                    state.refresh_layout_and_space();
                 }
                 WinitEvent::CloseRequested => {
                     state.quit();
