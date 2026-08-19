@@ -32,6 +32,7 @@ use crate::{
 /// A physical display output driven directly via DRM/KMS and GBM framebuffer page-flipping.
 pub struct DrmDisplay {
     pub name: String,
+    pub card_id: usize,
     pub crtc: crtc::Handle,
     pub output: Output,
     pub gbm_surface: GbmBufferedSurface<GbmAllocator<DrmDeviceFd>, ()>,
@@ -56,6 +57,23 @@ impl DrmDisplay {
         let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
         let size = (self.size.0, self.size.1).into();
         let damage = Rectangle::from_size(size);
+
+        // Mirrored outputs share one logical scene laid out in the primary
+        // output's coordinate space (windows, bar and cursor are all placed
+        // within the primary's usable area). Scale the scene to this display's
+        // own physical size so each panel shows the desktop at its native
+        // resolution (e.g. eDP-1 at 1920x1080 while the primary HDMI is
+        // 1366x768), instead of clipping it to the primary's size.
+        let scale = app
+            .output_manager
+            .outputs
+            .first()
+            .and_then(|o| o.current_mode())
+            .map(|m| {
+                (self.size.0 as f64 / m.size.w as f64).min(self.size.1 as f64 / m.size.h as f64)
+            })
+            .unwrap_or(1.0);
+
         let bg = Color32F::new(
             DESKTOP_BG_COLOR.r(),
             DESKTOP_BG_COLOR.g(),
@@ -65,7 +83,7 @@ impl DrmDisplay {
 
         if let Ok(mut frame) = self.renderer.render(&mut framebuffer, size, Transform::Normal) {
             let _ = frame.clear(bg, &[damage]);
-            let _ = draw_render_elements(&mut frame, 1.0, &elements, &[damage]);
+            let _ = draw_render_elements(&mut frame, scale, &elements, &[damage]);
             let _ = frame.finish();
         }
 
@@ -97,7 +115,7 @@ pub fn discover_and_init_drm_displays(
     loop_handle: &LoopHandle<'static, App>,
     dh: &DisplayHandle,
     app: &mut App,
-    vblank_tx: Sender<crtc::Handle>,
+    vblank_tx: Sender<(usize, crtc::Handle)>,
 ) -> Vec<DrmDisplay> {
     let mut displays = Vec::new();
 
@@ -121,7 +139,7 @@ pub fn discover_and_init_drm_displays(
         .collect();
     candidate_cards.sort();
 
-    for path in candidate_cards {
+    for (card_id, path) in candidate_cards.into_iter().enumerate() {
         let card_path = path.display();
 
         info!("truss: probing DRM card node at {}", card_path);
@@ -297,8 +315,8 @@ pub fn discover_and_init_drm_displays(
             let connector_type_name = format!("{:?}", conn_info.interface());
             let conn_name = format!("{}-{}", connector_type_name, conn_info.interface_id());
             info!(
-                "truss: configured DRM physical output '{}' ({}x{} @ {}Hz)",
-                conn_name, width, height, vrefresh
+                "truss: configured DRM physical output '{}' on card {} (crtc {:?}, {}x{} @ {}Hz)",
+                conn_name, card_id, crtc_handle, width, height, vrefresh
             );
 
             // Register physical output in OutputManager and create wl_output global
@@ -312,6 +330,7 @@ pub fn discover_and_init_drm_displays(
 
             displays.push(DrmDisplay {
                 name: conn_name,
+                card_id,
                 crtc: crtc_handle,
                 output,
                 gbm_surface,
@@ -326,7 +345,7 @@ pub fn discover_and_init_drm_displays(
         let _ = loop_handle.insert_source(notifier, move |event, _, _state: &mut App| {
             if let DrmEvent::VBlank(_crtc) = event {
                 // A queued GBM buffer may be released only after this event.
-                let _ = event_tx.send(_crtc);
+                let _ = event_tx.send((card_id, _crtc));
             }
         });
     }

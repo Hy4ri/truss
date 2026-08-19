@@ -23,7 +23,7 @@ use crate::{
 pub struct TtyBackend {
     pub session: LibSeatSession,
     pub drm_displays: Vec<DrmDisplay>,
-    vblank_rx: Receiver<smithay::reexports::drm::control::crtc::Handle>,
+    vblank_rx: Receiver<(usize, smithay::reexports::drm::control::crtc::Handle)>,
 }
 
 impl TtyBackend {
@@ -326,8 +326,8 @@ impl TtyBackend {
 
     /// Complete queued scanout only after the corresponding DRM vblank.
     pub fn handle_vblanks(&mut self) {
-        while let Ok(crtc) = self.vblank_rx.try_recv() {
-            if let Some(display) = self.display_for_crtc_mut(crtc) {
+        while let Ok((card_id, crtc)) = self.vblank_rx.try_recv() {
+            if let Some(display) = self.display_for_crtc_mut(card_id, crtc) {
                 if let Err(error) = display.frame_submitted() {
                     tracing::warn!("truss: failed to complete DRM frame: {error}");
                 }
@@ -337,10 +337,11 @@ impl TtyBackend {
 
     fn display_for_crtc_mut(
         &mut self,
+        card_id: usize,
         crtc: smithay::reexports::drm::control::crtc::Handle,
     ) -> Option<&mut DrmDisplay> {
         self.drm_displays
             .iter_mut()
-            .find(|display| display.crtc == crtc)
+            .find(|display| display.card_id == card_id && display.crtc == crtc)
     }
 }
