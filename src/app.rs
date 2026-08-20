@@ -24,10 +24,10 @@ use std::{
         Arc,
     },
 };
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::{
-    backend::{OutputManager, RenderManager},
+    backend::{OutputManager, RenderManager, DESKTOP_BG_COLOR},
     config::LuaConfig,
     dispatch::{Dispatcher, Event},
     input::{Keybindings, PointerState},
@@ -55,6 +55,7 @@ pub struct App {
     pub pending_focus_window: Option<WindowId>,
     pub keybindings: Keybindings,
     pub window_rules: WindowRuleManager,
+    pub bg_color: smithay::backend::renderer::Color32F,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
@@ -103,15 +104,7 @@ impl App {
 
         let state = State::new();
         let mut dispatcher = Dispatcher::new();
-        let mut window_rules = WindowRuleManager::new();
-
-        if let Some(config_path) = LuaConfig::find_default_config_path() {
-            info!("Loading configuration from {}", config_path.display());
-            if let Ok(()) = lua_config.load_file(&config_path) {
-                lua_config.apply_to_dispatcher(&mut dispatcher);
-                lua_config.apply_rules_to_manager(&mut window_rules);
-            }
-        }
+        let window_rules = WindowRuleManager::new();
 
         let ipc = IpcServer::new("truss.sock")?;
         ipc.setup_broadcaster(&mut dispatcher);
@@ -144,8 +137,9 @@ impl App {
             pointer_state: PointerState::new(),
             cursor_status: CursorImageStatus::default_named(),
             pending_focus_window: None,
-            keybindings: Keybindings::new_default(),
+            keybindings: Keybindings::new(),
             window_rules,
+            bg_color: DESKTOP_BG_COLOR,
             output_manager,
             render_manager,
             lua_config,

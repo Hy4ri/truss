@@ -8,9 +8,7 @@ use smithay::{
         },
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
-        renderer::{
-            gles::GlesRenderer, utils::draw_render_elements, Bind, Color32F, Frame, Renderer,
-        },
+        renderer::{gles::GlesRenderer, utils::draw_render_elements, Bind, Frame, Renderer},
         session::{libseat::LibSeatSession, Session},
     },
     output::Output,
@@ -24,10 +22,8 @@ use smithay::{
 };
 use tracing::{info, warn};
 
-use crate::{
-    backend::{collect_render_elements, DESKTOP_BG_COLOR},
-    App,
-};
+use crate::backend::collect_render_elements;
+use crate::App;
 
 /// A physical display output driven directly via DRM/KMS and GBM framebuffer page-flipping.
 pub struct DrmDisplay {
@@ -74,15 +70,11 @@ impl DrmDisplay {
             })
             .unwrap_or(1.0);
 
-        let bg = Color32F::new(
-            DESKTOP_BG_COLOR.r(),
-            DESKTOP_BG_COLOR.g(),
-            DESKTOP_BG_COLOR.b(),
-            DESKTOP_BG_COLOR.a(),
-        );
-
-        if let Ok(mut frame) = self.renderer.render(&mut framebuffer, size, Transform::Normal) {
-            let _ = frame.clear(bg, &[damage]);
+        if let Ok(mut frame) = self
+            .renderer
+            .render(&mut framebuffer, size, Transform::Normal)
+        {
+            let _ = frame.clear(app.bg_color, &[damage]);
             let _ = draw_render_elements(&mut frame, scale, &elements, &[damage]);
             let _ = frame.finish();
         }

@@ -72,7 +72,7 @@ pub struct Keybindings {
 
 impl Default for Keybindings {
     fn default() -> Self {
-        Self::new_default()
+        Self::new()
     }
 }
 
@@ -81,96 +81,6 @@ impl Keybindings {
         Self {
             bindings: HashMap::new(),
         }
-    }
-
-    /// Default ergonomic tiling keybindings (Super+Enter, Super+q, Super+1..9, etc.)
-    pub fn new_default() -> Self {
-        let mut kb = Self::new();
-
-        // XKB Keysym constants
-        const KEY_RETURN: u32 = 0xff0d;
-        const KEY_Q: u32 = 0x0071;
-        const KEY_D: u32 = 0x0064;
-        const KEY_F: u32 = 0x0066;
-        const KEY_J: u32 = 0x006a;
-        const KEY_K: u32 = 0x006b;
-        const KEY_SPACE: u32 = 0x0020;
-        const KEY_1: u32 = 0x0031;
-
-        // Super + Return -> Spawn terminal
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_RETURN),
-            KeyAction::Spawn("kitty".into()),
-        );
-
-        // Super + D -> App Launcher
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_D),
-            KeyAction::Spawn("fuzzel || rofi -show drun || wofi".into()),
-        );
-
-        // Super + Q -> Close focused window
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_Q),
-            KeyAction::Dispatch(Command::WindowClose { id: None }),
-        );
-
-        // Super + Shift + Q -> Quit compositor
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER_SHIFT, KEY_Q),
-            KeyAction::Dispatch(Command::CompositorQuit),
-        );
-
-        // Super + F -> Toggle fullscreen
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_F),
-            KeyAction::Dispatch(Command::WindowToggleFullscreen { id: None }),
-        );
-
-        // Super + Shift + Space -> Toggle floating
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER_SHIFT, KEY_SPACE),
-            KeyAction::Dispatch(Command::WindowToggleFloating { id: None }),
-        );
-
-        // Super + j / k -> Focus Next / Prev
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_J),
-            KeyAction::Dispatch(Command::WindowFocusDir {
-                direction: crate::dispatch::Direction::Next,
-            }),
-        );
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_K),
-            KeyAction::Dispatch(Command::WindowFocusDir {
-                direction: crate::dispatch::Direction::Prev,
-            }),
-        );
-
-        // Super + Space -> Swap with Master
-        kb.bind(
-            KeyPattern::new(Modifiers::SUPER, KEY_SPACE),
-            KeyAction::Dispatch(Command::WindowSwapMaster),
-        );
-
-        // Super + 1..9 -> Switch Workspace
-        // Super + Shift + 1..9 -> Move focused window to Workspace
-        for ws in 1..=9 {
-            let key = KEY_1 + (ws - 1);
-            kb.bind(
-                KeyPattern::new(Modifiers::SUPER, key),
-                KeyAction::Dispatch(Command::WorkspaceSwitch { id: ws }),
-            );
-            kb.bind(
-                KeyPattern::new(Modifiers::SUPER_SHIFT, key),
-                KeyAction::Dispatch(Command::WindowMoveToWorkspace {
-                    window_id: None,
-                    workspace_id: ws,
-                }),
-            );
-        }
-
-        kb
     }
 
     pub fn bind(&mut self, pattern: KeyPattern, action: KeyAction) {
@@ -230,6 +140,68 @@ impl Keybindings {
             }
         }
     }
+}
+
+/// Map a key name to an XKB keysym (subset used in keybindings).
+///
+/// Supports single ASCII letters/digits, named keys (Return, Escape, Tab,
+/// Space, BackSpace, Delete, Insert, Home, End, Page_Up/Prior, Page_Down/Next,
+/// arrows), punctuation keys (comma, period, slash, semicolon, apostrophe,
+/// minus, equal, grave, backslash, bracketleft, bracketright, plus) and
+/// F1..=F24.
+pub fn keysym_from_name(name: &str) -> Option<u32> {
+    let name = name.trim().to_lowercase();
+
+    // Single ASCII character: letters a-z / A-Z and digits 0-9.
+    if name.len() == 1 {
+        let c = name.as_bytes()[0];
+        return match c {
+            b'a'..=b'z' => Some(0x61 + (c - b'a') as u32),
+            b'0'..=b'9' => Some(0x30 + (c - b'0') as u32),
+            _ => None,
+        };
+    }
+
+    let named = match name.as_str() {
+        "return" | "enter" => 0xff0d,
+        "escape" => 0xff1b,
+        "tab" => 0xff09,
+        "space" => 0x0020,
+        "backspace" => 0xff08,
+        "delete" => 0xffff,
+        "insert" => 0xff63,
+        "home" => 0xff50,
+        "end" => 0xff57,
+        "page_up" | "prior" => 0xff55,
+        "page_down" | "next" => 0xff56,
+        "left" => 0xff51,
+        "up" => 0xff52,
+        "right" => 0xff53,
+        "down" => 0xff54,
+        "comma" => 0x002c,
+        "period" => 0x002e,
+        "slash" => 0x002f,
+        "semicolon" => 0x003b,
+        "apostrophe" => 0x0027,
+        "minus" => 0x002d,
+        "equal" => 0x003d,
+        "grave" => 0x0060,
+        "backslash" => 0x005c,
+        "bracketleft" => 0x005b,
+        "bracketright" => 0x005d,
+        "plus" => 0x002b,
+        _ => {
+            // F1..=F24 -> 0xffbe..=0xffd5
+            let f = name.strip_prefix('f')?;
+            let n: u32 = f.parse().ok()?;
+            if (1..=24).contains(&n) {
+                0xffbe + (n - 1)
+            } else {
+                return None;
+            }
+        }
+    };
+    Some(named)
 }
 
 /// Helper function to parse virtual terminal switch requests from keyboard events.

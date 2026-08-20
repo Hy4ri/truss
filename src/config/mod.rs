@@ -7,8 +7,19 @@ use tracing::{info, warn};
 pub use plugins::LuaPluginManager;
 
 use crate::dispatch::{Command, Event};
+use crate::input::{KeyAction, KeyPattern, Keybindings, Modifiers};
 use crate::layout::LayoutRegistry;
 use crate::state::{WindowId, WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher};
+
+/// The built-in default configuration, used when no config file exists.
+pub const DEFAULT_CONFIG: &str = include_str!("../../resources/config.default.lua");
+
+/// Where the configuration was resolved from.
+#[derive(Debug)]
+pub enum ConfigSource {
+    File(PathBuf),
+    Embedded,
+}
 
 /// Lua Configuration Runtime environment for truss.
 pub struct LuaConfig {
@@ -46,6 +57,16 @@ impl LuaConfig {
         let autostart = self.lua.create_table()?;
         self.lua
             .set_named_registry_value("_truss_autostart", autostart)?;
+
+        // Keybindings table
+        let keybinds = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_keybinds", keybinds)?;
+
+        // Settings table
+        let settings = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_settings", settings)?;
 
         // truss.version
         truss.set("version", env!("CARGO_PKG_VERSION"))?;
@@ -116,6 +137,35 @@ impl LuaConfig {
                 })?;
         truss.set("window_rule", rule_fn)?;
 
+        // Helper: truss.keybind(mods, key, action) - register a keybinding
+        let lua_for_keybinds = self.lua.clone();
+        let keybind_fn = self.lua.create_function(
+            move |_, (mods, key, action): (String, String, mlua::Value)| {
+                let keybinds: mlua::Table =
+                    lua_for_keybinds.named_registry_value("_truss_keybinds")?;
+                let entry = lua_for_keybinds.create_table()?;
+                entry.set("mods", mods)?;
+                entry.set("key", key)?;
+                entry.set("action", action)?;
+                let len = keybinds.raw_len();
+                keybinds.set(len + 1, entry)?;
+                Ok(())
+            },
+        )?;
+        truss.set("keybind", keybind_fn)?;
+
+        // Helper: truss.set(name, value) - register a compositor setting
+        let lua_for_settings = self.lua.clone();
+        let set_fn = self
+            .lua
+            .create_function(move |_, (name, value): (String, mlua::Value)| {
+                let settings: mlua::Table =
+                    lua_for_settings.named_registry_value("_truss_settings")?;
+                settings.set(name, value)?;
+                Ok(())
+            })?;
+        truss.set("set", set_fn)?;
+
         // Command constructors
         let cmd_table = self.lua.create_table()?;
 
@@ -125,10 +175,23 @@ impl LuaConfig {
         })?;
         cmd_table.set("workspace_switch", ws_switch)?;
 
+        let move_to_ws = self.lua.create_function(|lua, ws: u32| {
+            let cmd = Command::WindowMoveToWorkspace {
+                window_id: None,
+                workspace_id: ws,
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("move_to_workspace", move_to_ws)?;
+
         let win_focus_dir = self.lua.create_function(|lua, dir: String| {
             let direction = match dir.to_lowercase().as_str() {
                 "prev" => crate::dispatch::Direction::Prev,
-                _ => crate::dispatch::Direction::Next,
+                "next" => crate::dispatch::Direction::Next,
+                other => {
+                    warn!("truss: unknown focus direction '{other}', defaulting to next");
+                    crate::dispatch::Direction::Next
+                }
             };
             let cmd = Command::WindowFocusDir { direction };
             lua.to_value(&cmd)
@@ -226,6 +289,127 @@ impl LuaConfig {
         }
     }
 
+    /// Convert registered `truss.keybind` entries into Keybindings.
+    pub fn apply_keybindings(&self, kb: &mut Keybindings) {
+        let Ok(entries) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_keybinds")
+        else {
+            return;
+        };
+        for entry in entries.sequence_values::<mlua::Table>().flatten() {
+            let mods_str: String = match entry.get("mods") {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!("truss: keybind invalid mods: {e}");
+                    continue;
+                }
+            };
+
+            // Empty mods string -> bare binding with no modifiers.
+            let mut mods = Modifiers::NONE;
+            let mut valid = true;
+            if !mods_str.trim().is_empty() {
+                for tok in mods_str.split('+') {
+                    match tok.trim().to_lowercase().as_str() {
+                        "ctrl" => mods.ctrl = true,
+                        "alt" => mods.alt = true,
+                        "shift" => mods.shift = true,
+                        "super" | "mod4" | "logo" => mods.logo = true,
+                        other => {
+                            warn!("truss: unknown modifier '{other}' in keybind");
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !valid {
+                continue;
+            }
+
+            let key: String = match entry.get("key") {
+                Ok(k) => k,
+                Err(e) => {
+                    warn!("truss: keybind invalid key: {e}");
+                    continue;
+                }
+            };
+            let Some(keysym) = crate::input::keybindings::keysym_from_name(&key) else {
+                warn!("truss: unknown key '{key}' in keybind");
+                continue;
+            };
+
+            let action: mlua::Value = match entry.get("action") {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!("truss: keybind missing action: {e}");
+                    continue;
+                }
+            };
+            let action = match action {
+                mlua::Value::String(s) => KeyAction::Spawn(s.to_string_lossy()),
+                other => match self.lua.from_value::<Command>(other) {
+                    Ok(cmd) => KeyAction::Dispatch(cmd),
+                    Err(e) => {
+                        warn!("truss: invalid keybind action: {e}");
+                        continue;
+                    }
+                },
+            };
+
+            kb.bind(KeyPattern::new(mods, keysym), action);
+        }
+    }
+
+    /// Apply settings registered via `truss.set(...)` onto the compositor.
+    pub fn apply_settings(
+        &self,
+        dispatcher: &mut crate::dispatch::Dispatcher,
+        state: &mut crate::state::State,
+        bg_color: &mut smithay::backend::renderer::Color32F,
+    ) {
+        let Ok(settings) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_settings")
+        else {
+            return;
+        };
+        for pair in settings.pairs::<String, mlua::Value>() {
+            let Ok((name, value)) = pair else { continue };
+            match name.as_str() {
+                "gap" => match self.lua.from_value::<u32>(value) {
+                    Ok(gap) => {
+                        if let Err(e) = dispatcher.dispatch(state, Command::LayoutSetGap { gap }) {
+                            warn!("truss: failed to apply gap setting: {e}");
+                        }
+                    }
+                    Err(e) => warn!("truss: invalid gap setting: {e}"),
+                },
+                "ratio" => match self.lua.from_value::<f32>(value) {
+                    Ok(ratio) => {
+                        if let Err(e) =
+                            dispatcher.dispatch(state, Command::LayoutSetRatio { ratio })
+                        {
+                            warn!("truss: failed to apply ratio setting: {e}");
+                        }
+                    }
+                    Err(e) => warn!("truss: invalid ratio setting: {e}"),
+                },
+                "bg_color" => match self.lua.from_value::<String>(value) {
+                    Ok(s) => match parse_hex_color(&s) {
+                        Some([r, g, b, _]) => {
+                            *bg_color = smithay::backend::renderer::Color32F::new(r, g, b, 1.0);
+                        }
+                        None => warn!("truss: malformed bg_color '{s}'"),
+                    },
+                    Err(e) => warn!("truss: invalid bg_color setting: {e}"),
+                },
+                other => warn!("truss: unknown setting '{other}'"),
+            }
+        }
+    }
+
     /// Run all commands registered with `truss.spawn_at_startup`
     pub fn run_autostart_commands(&self, socket_name: &str) {
         if let Ok(autostart) = self
@@ -283,24 +467,71 @@ impl LuaConfig {
             .exec()
     }
 
-    /// Locate default config file in $XDG_CONFIG_HOME/truss/config.lua or ~/.config/truss/config.lua
-    pub fn find_default_config_path() -> Option<PathBuf> {
+    /// Candidate config file locations, in priority order:
+    /// $XDG_CONFIG_HOME/truss/config.lua, ~/.config/truss/config.lua, /etc/xdg/truss/config.lua.
+    pub fn default_config_candidates() -> Vec<PathBuf> {
+        let mut candidates = Vec::new();
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            let p = PathBuf::from(xdg).join("truss").join("config.lua");
-            if p.exists() {
-                return Some(p);
+            if !xdg.is_empty() {
+                candidates.push(PathBuf::from(xdg).join("truss").join("config.lua"));
             }
         }
         if let Ok(home) = std::env::var("HOME") {
-            let p = PathBuf::from(home)
-                .join(".config")
-                .join("truss")
-                .join("config.lua");
-            if p.exists() {
-                return Some(p);
+            if !home.is_empty() {
+                candidates.push(
+                    PathBuf::from(home)
+                        .join(".config")
+                        .join("truss")
+                        .join("config.lua"),
+                );
+            }
+        }
+        candidates.push(PathBuf::from("/etc/xdg/truss/config.lua"));
+        candidates
+    }
+
+    /// Pure core of [`Self::default_user_config_path`]: resolves the path from
+    /// explicit `xdg`/`home` values instead of the environment, so the logic is
+    /// testable without mutating env vars.
+    pub fn default_user_config_path_from(xdg: Option<&str>, home: Option<&str>) -> Option<PathBuf> {
+        if let Some(xdg) = xdg {
+            if !xdg.is_empty() {
+                return Some(PathBuf::from(xdg).join("truss").join("config.lua"));
+            }
+        }
+        if let Some(home) = home {
+            if !home.is_empty() {
+                return Some(
+                    PathBuf::from(home)
+                        .join(".config")
+                        .join("truss")
+                        .join("config.lua"),
+                );
             }
         }
         None
+    }
+
+    /// The user config path where `truss init-config` writes the default config:
+    /// $XDG_CONFIG_HOME/truss/config.lua, or ~/.config/truss/config.lua.
+    pub fn default_user_config_path() -> Option<PathBuf> {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let home = std::env::var("HOME").ok();
+        Self::default_user_config_path_from(xdg.as_deref(), home.as_deref())
+    }
+
+    /// Resolve where configuration comes from: an explicit CLI path wins
+    /// unconditionally, then the first existing candidate, else the embedded default.
+    pub fn resolve_config_source(cli_path: Option<&Path>, candidates: &[PathBuf]) -> ConfigSource {
+        if let Some(path) = cli_path {
+            return ConfigSource::File(path.to_path_buf());
+        }
+        for candidate in candidates {
+            if candidate.exists() {
+                return ConfigSource::File(candidate.clone());
+            }
+        }
+        ConfigSource::Embedded
     }
 
     /// Apply custom configuration values and sync Lua plugins to layout registry.
@@ -318,4 +549,29 @@ impl LuaConfig {
     pub fn get_global<T: mlua::FromLua>(&self, name: &str) -> Result<T, mlua::Error> {
         self.lua.globals().get(name)
     }
+}
+
+/// Parse a hex color string (`#rgb` or `#rrggbb`) into RGBA floats (0.0..=1.0).
+fn parse_hex_color(s: &str) -> Option<[f32; 4]> {
+    let hex = s.trim().strip_prefix('#')?;
+    // `hex.len()` is a byte count; slicing below must never land mid-UTF-8-char.
+    if !hex.is_ascii() {
+        return None;
+    }
+    let (r, g, b) = match hex.len() {
+        3 => {
+            let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).ok()?;
+            let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).ok()?;
+            let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).ok()?;
+            (r, g, b)
+        }
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            (r, g, b)
+        }
+        _ => return None,
+    };
+    Some([r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0])
 }

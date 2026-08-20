@@ -1,4 +1,5 @@
 use smithay::utils::Point;
+use truss::config::LuaConfig;
 use truss::dispatch::{Command, Direction, DispatchResult, Dispatcher};
 use truss::input::{
     parse_vt_switch, KeyAction, KeyPattern, Keybindings, Modifiers, PointerDragMode,
@@ -44,11 +45,28 @@ fn test_vt_switch_keysym_calculation() {
 
 #[test]
 fn test_default_keybindings_match() {
-    let kb = Keybindings::new_default();
+    // Default keybindings are config-driven: exercise the Lua path end-to-end.
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.keybind("SUPER", "Return", truss.cmd.spawn("kitty"))
+        truss.keybind("SUPER+SHIFT", "q", truss.cmd.quit())
+        truss.keybind("SUPER", "j", truss.cmd.window_focus_dir("next"))
+        truss.keybind("SUPER", "2", truss.cmd.workspace_switch(2))
+    "#,
+    )
+    .unwrap();
+    let mut kb = Keybindings::new();
+    cfg.apply_keybindings(&mut kb);
 
-    // Super + Return -> Spawn("kitty")
+    // Super + Return -> Spawn("kitty") via the Command::Spawn dispatch path
     let action_return = kb.match_action(Modifiers::SUPER, 0xff0d);
-    assert_eq!(action_return, Some(&KeyAction::Spawn("kitty".into())));
+    assert_eq!(
+        action_return,
+        Some(&KeyAction::Dispatch(Command::Spawn {
+            command: "kitty".into()
+        }))
+    );
 
     // Super + Shift + Q -> CompositorQuit (matching both lowercase 0x71 and uppercase 0x51)
     let action_quit_lower = kb.match_action(Modifiers::SUPER_SHIFT, 0x0071);

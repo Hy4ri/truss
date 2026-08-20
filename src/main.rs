@@ -6,7 +6,7 @@ use smithay::{
             AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
             PointerButtonEvent,
         },
-        renderer::{gles::GlesRenderer, utils::draw_render_elements, Color32F, Frame, Renderer},
+        renderer::{gles::GlesRenderer, utils::draw_render_elements, Frame, Renderer},
         winit::{self, WinitEvent},
     },
     desktop::utils::send_frames_surface_tree,
@@ -23,7 +23,8 @@ use wayland_server::ListeningSocket;
 use truss::{
     backend::TtyBackend,
     bar::run_status_bar,
-    cli::{handle_msg_command, CliArgs, Subcommand},
+    cli::{handle_init_config_command, handle_msg_command, CliArgs, Subcommand},
+    config::{ConfigSource, LuaConfig, DEFAULT_CONFIG},
     input::{Modifiers, PointerDragMode, PointerFocusTarget},
     protocols::compositor::ClientState,
     App,
@@ -47,6 +48,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Subcommand::Msg(args)) => {
             return handle_msg_command(&args);
         }
+        Some(Subcommand::InitConfig) => {
+            return handle_init_config_command();
+        }
         None => {}
     }
 
@@ -60,17 +64,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display: Display<App> = Display::new()?;
     let mut app = App::new(&mut display)?;
 
-    // If explicit config path was passed via CLI flags, load it
-    if let Some(ref config_path) = cli.config_path {
-        info!(
-            "truss: loading custom config from {}",
-            config_path.display()
-        );
-        if let Ok(()) = app.lua_config.load_file(config_path) {
-            app.lua_config.apply_rules_to_manager(&mut app.window_rules);
-            app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
+    // Resolve configuration: CLI path > XDG user config > /etc/xdg default > embedded default.
+    let config_source = LuaConfig::resolve_config_source(
+        cli.config_path.as_deref(),
+        &LuaConfig::default_config_candidates(),
+    );
+    match &config_source {
+        ConfigSource::File(path) => {
+            info!("truss: loading configuration from {}", path.display());
+            if let Err(e) = app.lua_config.load_file(path) {
+                warn!("truss: config load failed: {e}");
+                warn!("truss: falling back to embedded default configuration");
+                if let Err(e) = app.lua_config.load_string(DEFAULT_CONFIG) {
+                    warn!("truss: embedded default config failed: {e}");
+                }
+            }
+        }
+        ConfigSource::Embedded => {
+            info!("truss: no config file found, using embedded default configuration");
+            if let Err(e) = app.lua_config.load_string(DEFAULT_CONFIG) {
+                warn!("truss: embedded default config failed: {e}");
+            }
         }
     }
+    app.lua_config.apply_rules_to_manager(&mut app.window_rules);
+    app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
+    app.lua_config.apply_keybindings(&mut app.keybindings);
+    app.lua_config
+        .apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
 
     let dh = display.handle();
     let mut listener_dh = dh.clone();
@@ -139,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // see zero monitors ("no monitors available" in terminal apps).
         let _global = default_output.create_global::<App>(&dh);
 
-        info!("truss: Ready! Press Super+Return to spawn kitty, Super+D for launcher, Super+Q to close window");
+        info!("truss: Ready! Spawn apps with SUPER+Return (or via config), or `WAYLAND_DISPLAY={socket_name} <app>`");
 
         let start_time = std::time::Instant::now();
         let mut current_modifiers = Modifiers::NONE;
@@ -386,7 +407,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Ok(mut frame) =
                         renderer.render(&mut framebuffer, size, Transform::Flipped180)
                     {
-                        let _ = frame.clear(Color32F::new(0.08, 0.08, 0.10, 1.0), &[damage]);
+                        let _ = frame.clear(app.bg_color, &[damage]);
                         let _ = draw_render_elements(&mut frame, 1.0, &elements, &[damage]);
                         let _ = frame.finish();
                     }
@@ -424,7 +445,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match TtyBackend::init(&loop_handle, &dh, &mut app) {
             Ok(mut tty_backend) => {
                 info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
-                info!("truss: Ready! Press Super+Return to spawn kitty, or launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
+                info!("truss: Ready! Spawn apps with SUPER+Return (or via config), or `WAYLAND_DISPLAY={socket_name} <app>`");
                 info!(
                     "truss: Press Ctrl+Alt+F1..F12 to switch VTs, or Super+Shift+Q to exit cleanly"
                 );

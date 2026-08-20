@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
+use crate::config::{LuaConfig, DEFAULT_CONFIG};
 use crate::dispatch::{Command, Direction};
 use crate::ipc::protocol::{IpcRequest, IpcResponse};
 use crate::state::WindowId;
@@ -10,6 +11,7 @@ use crate::state::WindowId;
 pub enum Subcommand {
     Msg(Vec<String>),
     Bar,
+    InitConfig,
     Version,
     Help,
 }
@@ -35,7 +37,12 @@ impl Default for CliArgs {
 
 impl CliArgs {
     pub fn parse() -> Self {
-        let mut args = std::env::args().skip(1);
+        Self::parse_from(std::env::args().skip(1))
+    }
+
+    /// Pure core of [`Self::parse`]: parses arguments from an explicit
+    /// iterator instead of process args, so the logic is testable.
+    pub fn parse_from(mut args: impl Iterator<Item = String>) -> Self {
         let mut cli = Self::default();
 
         while let Some(arg) = args.next() {
@@ -65,6 +72,10 @@ impl CliArgs {
                 }
                 "bar" => {
                     cli.subcommand = Some(Subcommand::Bar);
+                    return cli;
+                }
+                "init-config" => {
+                    cli.subcommand = Some(Subcommand::InitConfig);
                     return cli;
                 }
                 "msg" => {
@@ -100,6 +111,7 @@ OPTIONS:
 SUBCOMMANDS:
     msg <COMMAND> [ARGS...]   Send IPC message to running compositor
     bar                       Run live status bar companion
+    init-config               Write the default configuration to ~/.config/truss/config.lua
 
 IPC COMMANDS:
     truss msg state-get                  Fetch complete compositor state
@@ -227,5 +239,37 @@ pub fn handle_msg_command(args: &[String]) -> Result<(), Box<dyn std::error::Err
         }
     }
 
+    Ok(())
+}
+
+/// Write the embedded default configuration to `path`, creating parent
+/// directories as needed. Refuses to overwrite an existing file.
+pub fn write_default_config(path: &Path) -> Result<(), String> {
+    if path.exists() {
+        return Err(format!("{} already exists, not overwriting", path.display()));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create directory {}: {e}", parent.display()))?;
+    }
+    std::fs::write(path, DEFAULT_CONFIG)
+        .map_err(|e| format!("failed to write {}: {e}", path.display()))
+}
+
+/// Write the embedded default configuration to the user's config directory.
+/// Refuses to overwrite an existing file.
+pub fn handle_init_config_command() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(path) = LuaConfig::default_user_config_path() else {
+        eprintln!(
+            "truss init-config: cannot determine user config directory \
+             (neither XDG_CONFIG_HOME nor HOME is set)"
+        );
+        std::process::exit(1);
+    };
+    if let Err(e) = write_default_config(&path) {
+        eprintln!("truss init-config: {e}");
+        std::process::exit(1);
+    }
+    println!("truss: default configuration written to {}", path.display());
     Ok(())
 }
