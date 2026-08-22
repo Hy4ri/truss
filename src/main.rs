@@ -455,16 +455,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while app.is_running() {
                     let elapsed = start_time.elapsed();
 
-                    // Render active physical DRM displays
-                    for drm_display in &mut tty_backend.drm_displays {
-                        if let Err(e) = drm_display.render_frame(&app) {
-                            tracing::trace!("truss: DRM render frame error: {e}");
+                    // Render active physical DRM displays — but only when
+                    // something actually changed. Vblank wakeups on an idle
+                    // desktop must not queue page-flips (flicker + CPU burn).
+                    if app.needs_redraw || tty_backend.has_pending_frames() {
+                        app.needs_redraw = false;
+                        for drm_display in &mut tty_backend.drm_displays {
+                            if let Err(e) = drm_display.render_frame(&app) {
+                                tracing::trace!("truss: DRM render frame error: {e}");
+                            }
                         }
-                    }
 
-                    // Dispatch Wayland frame callbacks across active outputs
-                    for output in &app.output_manager.outputs {
-                        for surface in app.xdg_shell_state.toplevel_surfaces() {
+                        // Dispatch Wayland frame callbacks across active outputs
+                        for output in &app.output_manager.outputs {
+                            for surface in app.xdg_shell_state.toplevel_surfaces() {
                             let is_on_inactive_ws = app
                                 .surfaces
                                 .iter()
@@ -481,6 +485,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     None,
                                     |_, _| Some(output.clone()),
                                 );
+                            }
                             }
                         }
                     }
