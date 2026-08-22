@@ -1,8 +1,8 @@
 use smithay::{
     backend::{
         input::{
-            ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent,
-            PointerMotionAbsoluteEvent, PointerMotionEvent,
+            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
+            PointerButtonEvent, PointerMotionAbsoluteEvent, PointerMotionEvent,
         },
         libinput::{LibinputInputBackend, LibinputSessionInterface},
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
@@ -183,13 +183,16 @@ impl TtyBackend {
                     // Tablets / spice virtio tablets report absolute screen
                     // coordinates. Map them onto the primary output's geometry.
                     let Some(output) = state.output_manager.outputs.first() else {
-                        return FilterResult::Forward;
+                        return;
                     };
                     let (o_w, o_h) = output
                         .current_mode()
                         .map(|m| (m.size.w as f64, m.size.h as f64))
                         .unwrap_or((1280.0, 800.0));
-                    if let Some(pos_logical) = event.position_transformed(o_w, o_h) {
+                    let pos_logical = event.position_transformed(
+                        smithay::utils::Size::from((o_w as i32, o_h as i32)),
+                    );
+                    {
                         state.pointer_state.location = pos_logical;
                         state.pointer_state.update_drag(&mut state.state);
                         state.needs_redraw = true;
