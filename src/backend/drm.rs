@@ -84,9 +84,17 @@ impl DrmDisplay {
             .renderer
             .render(&mut framebuffer, size, Transform::Normal)
         {
-            let _ = frame.clear(app.bg_color, &[damage]);
-            let _ = draw_render_elements(&mut frame, scale, &elements, &[damage]);
-            let _ = frame.finish();
+            if let Err(e) = frame.clear(app.bg_color, &[damage]) {
+                tracing::warn!("truss: DRM frame clear failed: {e}");
+            }
+            if let Err(e) = draw_render_elements(&mut frame, scale, &elements, &[damage]) {
+                tracing::warn!("truss: DRM frame draw failed: {e}");
+            }
+            if let Err(e) = frame.finish() {
+                tracing::warn!("truss: DRM frame finish failed: {e}");
+            }
+        } else {
+            tracing::warn!("truss: DRM render() failed, skipping frame");
         }
 
         self.gbm_surface
