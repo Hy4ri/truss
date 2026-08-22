@@ -469,23 +469,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Dispatch Wayland frame callbacks across active outputs
                         for output in &app.output_manager.outputs {
                             for surface in app.xdg_shell_state.toplevel_surfaces() {
-                            let is_on_inactive_ws = app
-                                .surfaces
-                                .iter()
-                                .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-                                .and_then(|(id, _)| app.state.windows.get(id))
-                                .map(|w| w.workspace_id != app.state.active_workspace_id)
-                                .unwrap_or(false);
+                                let is_on_inactive_ws = app
+                                    .surfaces
+                                    .iter()
+                                    .find(|(_, s)| s.wl_surface() == surface.wl_surface())
+                                    .and_then(|(id, _)| app.state.windows.get(id))
+                                    .map(|w| w.workspace_id != app.state.active_workspace_id)
+                                    .unwrap_or(false);
 
-                            if !is_on_inactive_ws {
-                                send_frames_surface_tree(
-                                    surface.wl_surface(),
-                                    output,
-                                    elapsed,
-                                    None,
-                                    |_, _| Some(output.clone()),
-                                );
-                            }
+                                if !is_on_inactive_ws {
+                                    send_frames_surface_tree(
+                                        surface.wl_surface(),
+                                        output,
+                                        elapsed,
+                                        None,
+                                        |_, _| Some(output.clone()),
+                                    );
+                                }
                             }
                         }
                     }

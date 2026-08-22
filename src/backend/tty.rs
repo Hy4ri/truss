@@ -189,9 +189,8 @@ impl TtyBackend {
                         .current_mode()
                         .map(|m| (m.size.w as f64, m.size.h as f64))
                         .unwrap_or((1280.0, 800.0));
-                    let pos_logical = event.position_transformed(
-                        smithay::utils::Size::from((o_w as i32, o_h as i32)),
-                    );
+                    let pos_logical = event
+                        .position_transformed(smithay::utils::Size::from((o_w as i32, o_h as i32)));
                     {
                         state.pointer_state.location = pos_logical;
                         state.pointer_state.update_drag(&mut state.state);

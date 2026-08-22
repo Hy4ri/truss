@@ -246,7 +246,10 @@ pub fn handle_msg_command(args: &[String]) -> Result<(), Box<dyn std::error::Err
 /// directories as needed. Refuses to overwrite an existing file.
 pub fn write_default_config(path: &Path) -> Result<(), String> {
     if path.exists() {
-        return Err(format!("{} already exists, not overwriting", path.display()));
+        return Err(format!(
+            "{} already exists, not overwriting",
+            path.display()
+        ));
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)

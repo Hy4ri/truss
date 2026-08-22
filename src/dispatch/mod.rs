@@ -220,9 +220,9 @@ impl Dispatcher {
             Command::Spawn { command } => {
                 let wayland_display =
                     std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "truss-0".into());
-                crate::process::spawn_wayland_command(&command, &wayland_display).map_err(
-                    |e| DispatchError::InvalidParams(format!("Failed to spawn {command}: {e}")),
-                )?;
+                crate::process::spawn_wayland_command(&command, &wayland_display).map_err(|e| {
+                    DispatchError::InvalidParams(format!("Failed to spawn {command}: {e}"))
+                })?;
                 Ok(DispatchResult::Ok)
             }
 
