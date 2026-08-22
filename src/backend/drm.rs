@@ -35,11 +35,21 @@ pub struct DrmDisplay {
     pub renderer: GlesRenderer,
     pub size: (i32, i32),
     pub cursor_manager: crate::backend::cursor::CursorManager,
+    /// True while the last queued buffer is still awaiting its vblank/page-flip.
+    /// While set, this display must not render again or the swapchain runs dry
+    /// and in-progress buffers get scanned out mid-draw (flicker).
+    pub pending_frame: bool,
 }
 
 impl DrmDisplay {
     /// Render current compositor scene (windows, background, layers) and scan out to the physical monitor.
     pub fn render_frame(&mut self, app: &App) -> Result<(), Box<dyn std::error::Error>> {
+        if self.pending_frame {
+            // Previous buffer still awaiting vblank — rendering now would
+            // exhaust the swapchain and scan out a half-drawn frame.
+            return Ok(());
+        }
+
         let (mut dmabuf, _age) = self
             .gbm_surface
             .next_buffer()
@@ -82,6 +92,7 @@ impl DrmDisplay {
         self.gbm_surface
             .queue_buffer(None, None, ())
             .map_err(|e| format!("DRM queue_buffer failed: {e}"))?;
+        self.pending_frame = true;
         Ok(())
     }
 
@@ -98,6 +109,9 @@ impl DrmDisplay {
     /// Reset DRM surface state after VT switch resume.
     pub fn reset_state(&mut self) {
         let _ = self.gbm_surface.surface().reset_state();
+        // Surface buffers were reclaimed by the kernel during the VT switch;
+        // allow rendering again even if no final vblank arrived.
+        self.pending_frame = false;
     }
 }
 
@@ -329,6 +343,7 @@ pub fn discover_and_init_drm_displays(
                 renderer,
                 size: (width, height),
                 cursor_manager: crate::backend::cursor::CursorManager::new(),
+                pending_frame: false,
             });
         }
 

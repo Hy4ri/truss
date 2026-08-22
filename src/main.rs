@@ -436,7 +436,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            event_loop.dispatch(Duration::from_millis(5), &mut app)?;
+            event_loop.dispatch(Duration::from_millis(500), &mut app)?;
             app.process_pending_events();
             display.dispatch_clients(&mut app)?;
             display.flush_clients()?;
@@ -485,7 +485,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    event_loop.dispatch(Duration::from_millis(5), &mut app)?;
+                    // Sleep until a real event arrives (input, client, vblank,
+                    // timer). Rendering is paced by DRM vblanks, not by polling.
+                    event_loop.dispatch(Duration::from_millis(500), &mut app)?;
                     tty_backend.handle_vblanks();
                     app.process_pending_events();
                     display.dispatch_clients(&mut app)?;

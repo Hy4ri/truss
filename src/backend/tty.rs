@@ -331,6 +331,7 @@ impl TtyBackend {
                 if let Err(error) = display.frame_submitted() {
                     tracing::warn!("truss: failed to complete DRM frame: {error}");
                 }
+                display.pending_frame = false;
             }
         }
     }
