@@ -68,6 +68,7 @@ impl CompositorHandler for App {
             .find(|(_, s)| s.wl_surface() == surface)
         {
             self.transaction_manager.on_surface_commit(win_id);
+            self.needs_redraw = true;
         }
     }
 }

@@ -7,8 +7,8 @@ pub mod dispatch;
 pub mod input;
 pub mod ipc;
 pub mod layout;
-pub mod protocols;
 pub mod process;
+pub mod protocols;
 pub mod state;
 pub mod sync;
 

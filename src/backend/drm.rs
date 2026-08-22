@@ -4,7 +4,7 @@ use smithay::{
     backend::{
         allocator::{
             gbm::{GbmAllocator, GbmBufferFlags, GbmDevice},
-            Fourcc,
+            Format, Fourcc, Modifier,
         },
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
@@ -35,11 +35,21 @@ pub struct DrmDisplay {
     pub renderer: GlesRenderer,
     pub size: (i32, i32),
     pub cursor_manager: crate::backend::cursor::CursorManager,
+    /// True while the last queued buffer is still awaiting its vblank/page-flip.
+    /// While set, this display must not render again or the swapchain runs dry
+    /// and in-progress buffers get scanned out mid-draw (flicker).
+    pub pending_frame: bool,
 }
 
 impl DrmDisplay {
     /// Render current compositor scene (windows, background, layers) and scan out to the physical monitor.
     pub fn render_frame(&mut self, app: &App) -> Result<(), Box<dyn std::error::Error>> {
+        if self.pending_frame {
+            // Previous buffer still awaiting vblank — rendering now would
+            // exhaust the swapchain and scan out a half-drawn frame.
+            return Ok(());
+        }
+
         let (mut dmabuf, _age) = self
             .gbm_surface
             .next_buffer()
@@ -70,18 +80,40 @@ impl DrmDisplay {
             })
             .unwrap_or(1.0);
 
-        if let Ok(mut frame) = self
+        let mut frame = match self
             .renderer
             .render(&mut framebuffer, size, Transform::Normal)
         {
-            let _ = frame.clear(app.bg_color, &[damage]);
-            let _ = draw_render_elements(&mut frame, scale, &elements, &[damage]);
-            let _ = frame.finish();
+            Ok(frame) => frame,
+            Err(e) => {
+                tracing::warn!("truss: DRM render() failed, skipping frame: {e}");
+                // Do NOT queue an undrawn buffer — that would scan out stale
+                // or uninitialized content.
+                return Ok(());
+            }
+        };
+        if let Err(e) = frame.clear(app.bg_color, &[damage]) {
+            tracing::warn!("truss: DRM frame clear failed: {e}");
         }
+        if let Err(e) = draw_render_elements(&mut frame, scale, &elements, &[damage]) {
+            tracing::warn!("truss: DRM frame draw failed: {e}");
+        }
+        let sync = match frame.finish() {
+            Ok(sync) => Some(sync),
+            Err(e) => {
+                tracing::warn!("truss: DRM frame finish failed: {e}");
+                None
+            }
+        };
 
+        // Hand the GL sync point to the DRM backend. On drivers without native
+        // fence support (virtio-gpu) it CPU-waits for rendering to complete
+        // before flipping; passing None lets the flip race the rasterizer and
+        // presents half-drawn frames (observed as displaced stale blocks).
         self.gbm_surface
-            .queue_buffer(None, None, ())
+            .queue_buffer(sync, None, ())
             .map_err(|e| format!("DRM queue_buffer failed: {e}"))?;
+        self.pending_frame = true;
         Ok(())
     }
 
@@ -98,6 +130,9 @@ impl DrmDisplay {
     /// Reset DRM surface state after VT switch resume.
     pub fn reset_state(&mut self) {
         let _ = self.gbm_surface.surface().reset_state();
+        // Surface buffers were reclaimed by the kernel during the VT switch;
+        // allow rendering again even if no final vblank arrived.
+        self.pending_frame = false;
     }
 }
 
@@ -173,7 +208,7 @@ pub fn discover_and_init_drm_displays(
             }
         };
 
-        let dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
+        let _dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
 
         let resources = match drm_device_fd.resource_handles() {
             Ok(r) => r,
@@ -272,11 +307,20 @@ pub fn discover_and_init_drm_displays(
             );
 
             let color_formats = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+            // Virtio-gpu's host-side surface copy is asynchronous and can sample
+            // guest buffers mid-render when they use non-linear modifiers,
+            // producing frames with displaced stale blocks (flicker). Forcing
+            // LINEAR keeps scanout buffers in plain guest RAM that the host
+            // reads synchronously. llvmpipe gains nothing from tiling anyway.
+            let linear_formats = [Format {
+                code: color_formats[0],
+                modifier: Modifier::Linear,
+            }];
             let gbm_surface = match GbmBufferedSurface::new(
                 drm_surface,
                 gbm_allocator,
                 &color_formats,
-                dmabuf_render_formats.clone(),
+                linear_formats,
             ) {
                 Ok(s) => s,
                 Err(e) => {
@@ -329,6 +373,7 @@ pub fn discover_and_init_drm_displays(
                 renderer,
                 size: (width, height),
                 cursor_manager: crate::backend::cursor::CursorManager::new(),
+                pending_frame: false,
             });
         }
 

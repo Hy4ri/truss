@@ -1,8 +1,8 @@
 use smithay::{
     backend::{
         input::{
-            ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent,
-            PointerMotionEvent,
+            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
+            PointerButtonEvent, PointerMotionEvent,
         },
         libinput::{LibinputInputBackend, LibinputSessionInterface},
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
@@ -144,6 +144,7 @@ impl TtyBackend {
                     let bounds = state.output_manager.primary_usable_area();
                     state.pointer_state.update_location(delta, bounds);
                     state.pointer_state.update_drag(&mut state.state);
+                    state.needs_redraw = true;
 
                     // Send configure to resized window if resizing
                     if let PointerDragMode::Resize { window_id, .. } = state.pointer_state.drag {
@@ -178,7 +179,43 @@ impl TtyBackend {
                         pointer.frame(state);
                     }
                 }
+                InputEvent::PointerMotionAbsolute { event } => {
+                    // Tablets / spice virtio tablets report absolute screen
+                    // coordinates. Map them onto the primary output's geometry.
+                    let Some(output) = state.output_manager.outputs.first() else {
+                        return;
+                    };
+                    let (o_w, o_h) = output
+                        .current_mode()
+                        .map(|m| (m.size.w as f64, m.size.h as f64))
+                        .unwrap_or((1280.0, 800.0));
+                    let pos_logical = event
+                        .position_transformed(smithay::utils::Size::from((o_w as i32, o_h as i32)));
+                    {
+                        state.pointer_state.location = pos_logical;
+                        state.pointer_state.update_drag(&mut state.state);
+                        state.needs_redraw = true;
+
+                        let pos = state.pointer_state.location;
+                        let surface_under = state.surface_under(pos);
+                        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                        let time = event.time_msec();
+                        if let Some(pointer) = state.seat.get_pointer() {
+                            pointer.motion(
+                                state,
+                                surface_under,
+                                &smithay::input::pointer::MotionEvent {
+                                    location: pos,
+                                    serial,
+                                    time,
+                                },
+                            );
+                            pointer.frame(state);
+                        }
+                    }
+                }
                 InputEvent::PointerButton { event } => {
+                    state.needs_redraw = true;
                     let target = state.pointer_state.find_target_at_location(&state.state);
                     let btn = event.button_code();
                     let is_pressed = event.state() == ButtonState::Pressed;
@@ -331,8 +368,14 @@ impl TtyBackend {
                 if let Err(error) = display.frame_submitted() {
                     tracing::warn!("truss: failed to complete DRM frame: {error}");
                 }
+                display.pending_frame = false;
             }
         }
+    }
+
+    /// True while any display still has a queued flip awaiting its vblank.
+    pub fn has_pending_frames(&self) -> bool {
+        self.drm_displays.iter().any(|d| d.pending_frame)
     }
 
     fn display_for_crtc_mut(

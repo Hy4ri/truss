@@ -68,6 +68,10 @@ pub struct App {
     pub ipc: IpcServer,
     pub event_rx: Receiver<Event>,
     pub shutdown: Arc<AtomicBool>,
+    /// Set whenever anything visible changed (windows, focus, cursor, client
+    /// damage). The TTY loop renders only when this is set, then clears it —
+    /// idle desktops must not queue page-flips at refresh rate (flicker/CPU).
+    pub needs_redraw: bool,
 }
 
 impl App {
@@ -152,6 +156,7 @@ impl App {
             ipc,
             event_rx,
             shutdown,
+            needs_redraw: true,
         })
     }
 
@@ -233,6 +238,7 @@ impl App {
 
     /// Refresh and recalculate layouts for active workspaces across outputs.
     pub fn refresh_layout_and_space(&mut self) {
+        self.needs_redraw = true;
         // Cleanup dead popup trees periodically
         self.popups.cleanup();
 
