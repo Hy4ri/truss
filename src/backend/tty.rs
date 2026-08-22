@@ -2,7 +2,7 @@ use smithay::{
     backend::{
         input::{
             AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
-            PointerButtonEvent, PointerMotionAbsoluteEvent, PointerMotionEvent,
+            PointerButtonEvent, PointerMotionEvent,
         },
         libinput::{LibinputInputBackend, LibinputSessionInterface},
         session::{libseat::LibSeatSession, Event as SessionEvent, Session},
