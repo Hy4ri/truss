@@ -80,25 +80,38 @@ impl DrmDisplay {
             })
             .unwrap_or(1.0);
 
-        if let Ok(mut frame) = self
+        let mut frame = match self
             .renderer
             .render(&mut framebuffer, size, Transform::Normal)
         {
-            if let Err(e) = frame.clear(app.bg_color, &[damage]) {
-                tracing::warn!("truss: DRM frame clear failed: {e}");
+            Ok(frame) => frame,
+            Err(e) => {
+                tracing::warn!("truss: DRM render() failed, skipping frame: {e}");
+                // Do NOT queue an undrawn buffer — that would scan out stale
+                // or uninitialized content.
+                return Ok(());
             }
-            if let Err(e) = draw_render_elements(&mut frame, scale, &elements, &[damage]) {
-                tracing::warn!("truss: DRM frame draw failed: {e}");
-            }
-            if let Err(e) = frame.finish() {
-                tracing::warn!("truss: DRM frame finish failed: {e}");
-            }
-        } else {
-            tracing::warn!("truss: DRM render() failed, skipping frame");
+        };
+        if let Err(e) = frame.clear(app.bg_color, &[damage]) {
+            tracing::warn!("truss: DRM frame clear failed: {e}");
         }
+        if let Err(e) = draw_render_elements(&mut frame, scale, &elements, &[damage]) {
+            tracing::warn!("truss: DRM frame draw failed: {e}");
+        }
+        let sync = match frame.finish() {
+            Ok(sync) => Some(sync),
+            Err(e) => {
+                tracing::warn!("truss: DRM frame finish failed: {e}");
+                None
+            }
+        };
 
+        // Hand the GL sync point to the DRM backend. On drivers without native
+        // fence support (virtio-gpu) it CPU-waits for rendering to complete
+        // before flipping; passing None lets the flip race the rasterizer and
+        // presents half-drawn frames (observed as displaced stale blocks).
         self.gbm_surface
-            .queue_buffer(None, None, ())
+            .queue_buffer(sync, None, ())
             .map_err(|e| format!("DRM queue_buffer failed: {e}"))?;
         self.pending_frame = true;
         Ok(())
