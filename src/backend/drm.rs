@@ -4,7 +4,7 @@ use smithay::{
     backend::{
         allocator::{
             gbm::{GbmAllocator, GbmBufferFlags, GbmDevice},
-            Fourcc,
+            Format, Fourcc, Modifier,
         },
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
@@ -195,7 +195,7 @@ pub fn discover_and_init_drm_displays(
             }
         };
 
-        let dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
+        let _dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
 
         let resources = match drm_device_fd.resource_handles() {
             Ok(r) => r,
@@ -294,11 +294,20 @@ pub fn discover_and_init_drm_displays(
             );
 
             let color_formats = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+            // Virtio-gpu's host-side surface copy is asynchronous and can sample
+            // guest buffers mid-render when they use non-linear modifiers,
+            // producing frames with displaced stale blocks (flicker). Forcing
+            // LINEAR keeps scanout buffers in plain guest RAM that the host
+            // reads synchronously. llvmpipe gains nothing from tiling anyway.
+            let linear_formats = [Format {
+                code: color_formats[0],
+                modifier: Modifier::Linear,
+            }];
             let gbm_surface = match GbmBufferedSurface::new(
                 drm_surface,
                 gbm_allocator,
                 &color_formats,
-                dmabuf_render_formats.clone(),
+                linear_formats,
             ) {
                 Ok(s) => s,
                 Err(e) => {
