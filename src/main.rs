@@ -409,14 +409,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         while app.is_running() {
-            let size = backend.window_size();
             // Synchronized-resize: withhold presentation while a transaction
             // is in flight so clients commit into one atomic visual update.
             // Event dispatch below keeps running — client commits must be
             // processed for the transaction to ever complete.
             if app.transaction_manager.has_active_transactions() {
                 app.transaction_manager.prune_expired();
-            } else {
+            } else if app.needs_redraw {
+                // Render gate: only redraw when something actually changed.
+                // Without the dirty flag this loop rendered+submitted
+                // unconditionally every iteration — CPU/GPU burn while idle
+                // in nested mode.
+                app.needs_redraw = false;
+                let size = backend.window_size();
                 let age = backend.buffer_age().unwrap_or(0);
                 // Damage-tracked redraw: None means nothing visible changed —
                 // skip render/submit entirely instead of flipping an identical
