@@ -1872,6 +1872,7 @@ dependencies = [
 name = "truss"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "mlua",
  "serde",
  "serde_json",

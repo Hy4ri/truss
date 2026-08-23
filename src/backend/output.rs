@@ -95,33 +95,6 @@ impl OutputManager {
         self.outputs.len() < prev_len
     }
 
-    /// Total bounding box enclosing all active outputs.
-    pub fn total_bounding_box(&self) -> Rect {
-        if self.outputs.is_empty() {
-            return Rect::new(0, 0, 1920, 1080);
-        }
-
-        let mut min_x = i32::MAX;
-        let mut min_y = i32::MAX;
-        let mut max_x = i32::MIN;
-        let mut max_y = i32::MIN;
-
-        for output in &self.outputs {
-            let pos = output.current_location();
-            let size = output
-                .current_mode()
-                .map(|m| (m.size.w, m.size.h))
-                .unwrap_or((1920, 1080));
-
-            min_x = min_x.min(pos.x);
-            min_y = min_y.min(pos.y);
-            max_x = max_x.max(pos.x + size.0);
-            max_y = max_y.max(pos.y + size.1);
-        }
-
-        Rect::new(min_x, min_y, (max_x - min_x) as u32, (max_y - min_y) as u32)
-    }
-
     /// Gets the primary output's usable geometry (excluding panels/bars with exclusive zones).
     pub fn primary_usable_area(&self) -> Rect {
         if let Some(output) = self.outputs.first() {
@@ -135,27 +108,5 @@ impl OutputManager {
             );
         }
         Rect::new(0, 0, 1920, 1080)
-    }
-
-    /// Retrieve metadata information for all managed outputs.
-    pub fn output_infos(&self) -> Vec<OutputInfo> {
-        self.outputs
-            .iter()
-            .map(|o| {
-                let pos = o.current_location();
-                let (w, h, refresh) = o
-                    .current_mode()
-                    .map(|m| (m.size.w as u32, m.size.h as u32, m.refresh))
-                    .unwrap_or((1920, 1080, 60_000));
-                let scale = o.current_scale().fractional_scale();
-
-                OutputInfo {
-                    name: o.name(),
-                    geometry: Rect::new(pos.x, pos.y, w, h),
-                    scale,
-                    refresh,
-                }
-            })
-            .collect()
     }
 }

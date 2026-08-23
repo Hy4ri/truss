@@ -6,7 +6,7 @@ mod tests {
     #[test]
     fn test_app_initialization() {
         let mut display: Display<App> = Display::new().unwrap();
-        let app = App::new(&mut display).unwrap();
+        let app = App::new(&mut display, "test.sock").unwrap();
 
         assert_eq!(app.state.active_workspace_id, 1);
         assert_eq!(app.state.workspaces.len(), 9);

@@ -4,7 +4,7 @@ use truss::App;
 #[test]
 fn test_window_focus_lifecycle() {
     let mut display: Display<App> = Display::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
 
     // Create windows in state
     let win1 = app.state.create_window(None).unwrap();

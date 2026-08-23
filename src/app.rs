@@ -80,7 +80,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(display: &mut Display<Self>) -> Result<Self, std::io::Error> {
+    pub fn new(display: &mut Display<Self>, ipc_socket_name: &str) -> Result<Self, std::io::Error> {
         let dh = display.handle();
 
         let compositor_state = CompositorState::new::<Self>(&dh);
@@ -115,7 +115,7 @@ impl App {
         let mut dispatcher = Dispatcher::new();
         let window_rules = WindowRuleManager::new();
 
-        let ipc = IpcServer::new("truss.sock")?;
+        let ipc = IpcServer::new(ipc_socket_name)?;
         ipc.setup_broadcaster(&mut dispatcher);
 
         let (event_tx, event_rx): (Sender<Event>, Receiver<Event>) = channel();

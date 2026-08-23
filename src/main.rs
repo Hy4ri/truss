@@ -43,10 +43,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some(Subcommand::Bar) => {
-            return run_status_bar("truss.sock");
+            return run_status_bar(&format!("{}.sock", cli.socket_name));
         }
         Some(Subcommand::Msg(args)) => {
-            return handle_msg_command(&args);
+            return handle_msg_command(&args, cli.socket_name.as_str());
         }
         Some(Subcommand::InitConfig) => {
             return handle_init_config_command();
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let mut display: Display<App> = Display::new()?;
-    let mut app = App::new(&mut display)?;
+    let mut app = App::new(&mut display, &format!("{}.sock", cli.socket_name))?;
 
     // Resolve configuration: CLI path > XDG user config > /etc/xdg default > embedded default.
     let config_source = LuaConfig::resolve_config_source(

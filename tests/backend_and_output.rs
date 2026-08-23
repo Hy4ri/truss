@@ -32,7 +32,7 @@ fn test_desktop_bg_color() {
 #[test]
 fn test_app_refresh_layout_and_space() {
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
 
     let w1 = app.state.create_window(Some(1)).unwrap();
     let w2 = app.state.create_window(Some(1)).unwrap();

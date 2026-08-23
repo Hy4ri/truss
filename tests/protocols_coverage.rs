@@ -4,7 +4,7 @@ use truss::App;
 #[test]
 fn test_protocols_initialization() {
     let mut display: Display<App> = Display::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
 
     // Verify all core and desktop integration protocol states are active
     assert!(app.keyboard.is_some());

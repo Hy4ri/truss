@@ -14,7 +14,6 @@ pub use protocol::{IpcEventMessage, IpcRequest, IpcResponse};
 
 use crate::{
     dispatch::{Dispatcher, Event},
-    state::State,
     App,
 };
 
@@ -230,61 +229,6 @@ impl IpcServer {
                     true
                 }
             });
-        });
-    }
-
-    /// Non-blocking poll for new connections and incoming requests (fallback).
-    pub fn poll_and_dispatch(&mut self, state: &mut State, dispatcher: &mut Dispatcher) {
-        // Accept new connections
-        if let Some(ref listener) = self.listener {
-            while let Ok((stream, _)) = listener.accept() {
-                if let Ok(()) = stream.set_nonblocking(true) {
-                    if let Ok(mut clients) = self.clients.lock() {
-                        clients.push(stream);
-                    }
-                }
-            }
-        }
-
-        // Process incoming lines from clients
-        let mut clients = match self.clients.lock() {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-
-        clients.retain_mut(|client| {
-            let mut reader = BufReader::new(client.try_clone().unwrap());
-            let mut line = String::new();
-
-            match reader.read_line(&mut line) {
-                Ok(0) => false, // EOF / Client disconnected
-                Ok(_) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        return true;
-                    }
-
-                    let response = match serde_json::from_str::<IpcRequest>(trimmed) {
-                        Ok(req) => match dispatcher.dispatch(state, req.command) {
-                            Ok(res) => IpcResponse::success(req.id, res),
-                            Err(err) => IpcResponse::error(req.id, err),
-                        },
-                        Err(parse_err) => IpcResponse {
-                            id: None,
-                            ok: false,
-                            result: None,
-                            error: Some(format!("Invalid JSON request: {parse_err}")),
-                        },
-                    };
-
-                    if let Ok(resp_json) = serde_json::to_string(&response) {
-                        let _ = client.write_all(format!("{resp_json}\n").as_bytes());
-                    }
-                    true
-                }
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => true,
-                Err(_) => false,
-            }
         });
     }
 }

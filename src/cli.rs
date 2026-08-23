@@ -137,7 +137,10 @@ IPC COMMANDS:
 }
 
 /// Send IPC command to running truss compositor instance over UNIX socket
-pub fn handle_msg_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+pub fn handle_msg_command(
+    args: &[String],
+    socket_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     if args.is_empty() {
         eprintln!("truss msg: missing command. Run `truss --help` for available commands.");
         std::process::exit(1);
@@ -204,7 +207,7 @@ pub fn handle_msg_command(args: &[String]) -> Result<(), Box<dyn std::error::Err
     };
 
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    let socket_path = Path::new(&runtime_dir).join("truss.sock");
+    let socket_path = Path::new(&runtime_dir).join(format!("{socket_name}.sock"));
 
     let mut stream = UnixStream::connect(&socket_path).map_err(|e| {
         format!(
