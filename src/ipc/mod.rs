@@ -168,7 +168,7 @@ impl IpcServer {
                                                     == std::io::ErrorKind::WouldBlock =>
                                             {
                                                 // Socket fully drained — stop the loop
-                                                break;
+                                                break Ok(PostAction::Continue);
                                             }
                                             Err(_) => return Ok(PostAction::Remove),
                                         }
