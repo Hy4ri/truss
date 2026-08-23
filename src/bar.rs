@@ -105,46 +105,10 @@ fn chrono_or_fallback_time() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     // Local wall-clock time via libc (respects TZ), no chrono dependency.
-    #[repr(C)]
-    struct Tm {
-        tm_sec: libc::c_int,
-        tm_min: libc::c_int,
-        tm_hour: libc::c_int,
-        tm_mday: libc::c_int,
-        tm_mon: libc::c_int,
-        tm_year: libc::c_int,
-        tm_wday: libc::c_int,
-        tm_yday: libc::c_int,
-        tm_isdst: libc::c_int,
-        tm_gmtoff: libc::c_long,
-        tm_zone: *const libc::c_char,
-    }
-    extern "C" {
-        fn localtime_r(timep: *const libc::time_t, result: *mut Tm) -> *mut Tm;
-    }
-    let mut tm = Tm {
-        tm_sec: 0,
-        tm_min: 0,
-        tm_hour: 0,
-        tm_mday: 0,
-        tm_mon: 0,
-        tm_year: 0,
-        tm_wday: 0,
-        tm_yday: 0,
-        tm_isdst: 0,
-        tm_gmtoff: 0,
-        tm_zone: std::ptr::null(),
-    };
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     let t = secs as libc::time_t;
-    // SAFETY: `t` is a valid time_t and `tm` is a fully-owned Tm allocation.
-    if unsafe {
-        localtime_r(
-            &t as *const libc::time_t,
-            &mut tm as *mut Tm as *mut libc::tm,
-        )
-    }
-    .is_null()
-    {
+    // SAFETY: `t` points to a valid time_t, `tm` is a fully-owned allocation.
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
         return format!("{secs} epoch");
     }
     let (hours, minutes, seconds) = (tm.tm_hour, tm.tm_min, tm.tm_sec);
