@@ -9,10 +9,8 @@ use smithay::{
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
         renderer::{
-            gles::GlesRenderer,
-            utils::draw_render_elements,
-            damage::OutputDamageTracker,
-            Bind, Frame, Renderer,
+            damage::OutputDamageTracker, gles::GlesRenderer, utils::draw_render_elements, Bind,
+            Frame, Renderer,
         },
         session::{libseat::LibSeatSession, Session},
     },
@@ -84,8 +82,7 @@ impl DrmDisplay {
         // frame (the dominant cost on llvmpipe).
         let force_full = self.force_full_redraw;
         self.force_full_redraw = false;
-        let changed_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> = if force_full
-        {
+        let changed_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> = if force_full {
             Some(vec![Rectangle::from_size(size)])
         } else {
             match self

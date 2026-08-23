@@ -168,9 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let output_for_winit = default_output.clone();
         // Per-output damage tracking: only redraw what actually changed.
         let mut damage_tracker =
-            smithay::backend::renderer::damage::OutputDamageTracker::from_output(
-                &output_for_winit,
-            );
+            smithay::backend::renderer::damage::OutputDamageTracker::from_output(&output_for_winit);
 
         loop_handle.insert_source(
             winit_event_loop,
@@ -449,8 +447,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             renderer.render(&mut framebuffer, size, Transform::Flipped180)
                         {
                             let _ = frame.clear(app.bg_color, &damage_rects);
-                            let _ =
-                                draw_render_elements(&mut frame, 1.0, &elements, &damage_rects);
+                            let _ = draw_render_elements(&mut frame, 1.0, &elements, &damage_rects);
                             let _ = frame.finish();
                         }
                         pending_submit = Some(damage_rects);
