@@ -72,6 +72,11 @@ pub struct App {
     /// damage). The TTY loop renders only when this is set, then clears it —
     /// idle desktops must not queue page-flips at refresh rate (flicker/CPU).
     pub needs_redraw: bool,
+    /// Set by the session notifier when the session (re)activates after a VT
+    /// switch. The TTY loop — which owns the DRM displays the notifier cannot
+    /// reach — consumes it and calls `DrmDisplay::reset_state()` on each
+    /// display so rendering resumes instead of black-screening forever.
+    pub vt_resume_pending: bool,
 }
 
 impl App {
@@ -157,6 +162,7 @@ impl App {
             event_rx,
             shutdown,
             needs_redraw: true,
+            vt_resume_pending: false,
         })
     }
 

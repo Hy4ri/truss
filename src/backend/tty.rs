@@ -56,6 +56,11 @@ impl TtyBackend {
             }
             SessionEvent::ActivateSession => {
                 info!("truss: session activated (returned to VT)");
+                // DRM surfaces were torn down while the other VT owned the
+                // console; flag it and let the TTY loop (which owns the
+                // displays) reset GBM state + clear pending_frame so
+                // rendering resumes instead of black-screening forever.
+                state.vt_resume_pending = true;
                 state.refresh_layout_and_space();
             }
         })?;

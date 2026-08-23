@@ -473,6 +473,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while app.is_running() {
                     let elapsed = start_time.elapsed();
 
+                    // VT switch back: GBM buffers were reclaimed by the
+                    // kernel and the last vblank never arrived while paused,
+                    // leaving pending_frame stuck true. reset_state()
+                    // re-acquires surface state so frames render again.
+                    if app.vt_resume_pending {
+                        app.vt_resume_pending = false;
+                        for drm_display in &mut tty_backend.drm_displays {
+                            drm_display.reset_state();
+                        }
+                        app.needs_redraw = true;
+                    }
+
                     // Expire stale transactions even without events; re-arm
                     // redraw when the fail-safe releases the last one.
                     if app.transaction_manager.has_active_transactions() {
