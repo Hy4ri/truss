@@ -258,7 +258,11 @@ impl App {
         self.render_manager
             .sync_windows(&self.state, &self.surfaces);
 
-        // Update toplevel window surface states and configure sizes
+        // Update toplevel window surface states and configure sizes.
+        // Change-detecting: a surface is only sent a configure when its
+        // pending state actually differs. Idle-bar polling (`truss msg
+        // get-state` at 2Hz) used to reconfigure EVERY toplevel twice per
+        // request — endless client wakeups and toolkit re-renders.
         let focused = self.state.active_workspace().focused_window;
         let bounds_size = smithay::utils::Size::from((area.width as i32, area.height as i32));
 
@@ -273,8 +277,20 @@ impl App {
                 let is_active = is_on_active_ws && Some(id) == focused;
 
                 let mut size_changed = false;
+                let mut state_changed = false;
                 surface.with_pending_state(|state| {
                     use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State;
+
+                    let old_size = state.size;
+                    let old_activated = state.states.contains(State::Activated);
+                    let old_fullscreen = state.states.contains(State::Fullscreen);
+                    let tiled_set = [
+                        State::TiledLeft,
+                        State::TiledRight,
+                        State::TiledTop,
+                        State::TiledBottom,
+                    ];
+                    let old_tiled_any = tiled_set.iter().any(|s| state.states.contains(*s));
 
                     if is_active {
                         state.states.set(State::Activated);
@@ -306,9 +322,19 @@ impl App {
                         state.states.unset(State::TiledTop);
                         state.states.unset(State::TiledBottom);
                     }
+
+                    let new_tiled_any = tiled_set.iter().any(|s| state.states.contains(*s));
+                    state_changed = size_changed
+                        || old_size != state.size
+                        || old_activated != state.states.contains(State::Activated)
+                        || old_fullscreen != state.states.contains(State::Fullscreen)
+                        || old_tiled_any != new_tiled_any;
                 });
                 if size_changed {
                     resized.push(id);
+                }
+                if state_changed {
+                    surface.send_configure();
                 }
             }
         }
@@ -317,12 +343,6 @@ impl App {
             let count = resized.len();
             self.transaction_manager.create_transaction(resized);
             tracing::debug!("truss: resize transaction opened for {count} window(s)");
-        }
-
-        for (&id, surface) in &self.surfaces {
-            if self.state.windows.contains_key(&id) {
-                surface.send_configure();
-            }
         }
 
         // Update layer shell geometries for bars/panels

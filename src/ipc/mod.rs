@@ -110,18 +110,34 @@ impl IpcServer {
                                                             trimmed
                                                         ) {
                                                             Ok(req) => {
+                                                                let previous_focus = app
+                                                                    .state
+                                                                    .active_workspace()
+                                                                    .focused_window;
                                                                 match app.dispatcher.dispatch(
                                                                     &mut app.state,
                                                                     req.command,
                                                                 ) {
                                                                     Ok(res) => {
+                                                                        // Only reseat keyboard focus
+                                                                        // when the command actually
+                                                                        // moved it. A blanket
+                                                                        // set_focused_window per
+                                                                        // request meant a full layout
+                                                                        // refresh + reconfigure storm
+                                                                        // on every idle `get-state`
+                                                                        // poll from the bar.
                                                                         let new_focus = app
                                                                             .state
                                                                             .active_workspace()
                                                                             .focused_window;
-                                                                        app.set_focused_window(
-                                                                            new_focus,
-                                                                        );
+                                                                        if new_focus
+                                                                            != previous_focus
+                                                                        {
+                                                                            app.set_focused_window(
+                                                                                new_focus,
+                                                                            );
+                                                                        }
                                                                         // window.close only mutates
                                                                         // state; ask the client to close.
                                                                         for cid in app

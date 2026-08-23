@@ -166,6 +166,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut current_modifiers = Modifiers::NONE;
         let mut cursor_manager = truss::backend::CursorManager::new();
         let output_for_winit = default_output.clone();
+        // Per-output damage tracking: only redraw what actually changed.
+        let mut damage_tracker =
+            smithay::backend::renderer::damage::OutputDamageTracker::from_output(&output_for_winit);
 
         loop_handle.insert_source(
             winit_event_loop,
@@ -406,15 +409,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         while app.is_running() {
-            // Render gate: only redraw when something actually changed
-            // (needs_redraw) and no synchronized-resize transaction is in
-            // flight. Without the dirty flag this loop rendered+submitted
-            // unconditionally every iteration — CPU/GPU burn while idle in
-            // nested mode, frame callbacks sent regardless of change.
-            if app.needs_redraw && !app.transaction_manager.has_active_transactions() {
+            // Synchronized-resize: withhold presentation while a transaction
+            // is in flight so clients commit into one atomic visual update.
+            // Event dispatch below keeps running — client commits must be
+            // processed for the transaction to ever complete.
+            if app.transaction_manager.has_active_transactions() {
+                app.transaction_manager.prune_expired();
+            } else if app.needs_redraw {
+                // Render gate: only redraw when something actually changed.
+                // Without the dirty flag this loop rendered+submitted
+                // unconditionally every iteration — CPU/GPU burn while idle
+                // in nested mode.
                 app.needs_redraw = false;
                 let size = backend.window_size();
-                let damage = Rectangle::from_size(size);
+                let age = backend.buffer_age().unwrap_or(0);
+                // Damage-tracked redraw: None means nothing visible changed —
+                // skip render/submit entirely instead of flipping an identical
+                // frame every loop iteration. Tracker failure falls back to
+                // full-frame redraw.
+                let mut pending_submit: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
+                    None;
+>>>>>>> origin/main
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
                     let elements = truss::backend::collect_render_elements(
                         &app,
@@ -422,17 +437,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &mut cursor_manager,
                     );
 
-                    if let Ok(mut frame) =
-                        renderer.render(&mut framebuffer, size, Transform::Flipped180)
-                    {
-                        let _ = frame.clear(app.bg_color, &[damage]);
-                        let _ = draw_render_elements(&mut frame, 1.0, &elements, &[damage]);
-                        let _ = frame.finish();
+                    let render_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
+                        match damage_tracker.damage_output(age, &elements) {
+                            Ok((Some(rects), _)) => Some(rects.clone()),
+                            Ok((None, _)) => None,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "truss: winit damage tracking failed, full redraw: {e}"
+                                );
+                                Some(vec![Rectangle::from_size(size)])
+                            }
+                        };
+                    if let Some(damage_rects) = render_damage {
+                        if let Ok(mut frame) =
+                            renderer.render(&mut framebuffer, size, Transform::Flipped180)
+                        {
+                            let _ = frame.clear(app.bg_color, &damage_rects);
+                            let _ = draw_render_elements(&mut frame, 1.0, &elements, &damage_rects);
+                            let _ = frame.finish();
+                        }
+                        pending_submit = Some(damage_rects);
                     }
                 }
-                let _ = backend.submit(Some(&[damage]));
-            } else if app.transaction_manager.has_active_transactions() {
-                app.transaction_manager.prune_expired();
+                if let Some(damage_rects) = pending_submit {
+                    let _ = backend.submit(Some(&damage_rects));
+                }
             }
 
             let elapsed = start_time.elapsed();
@@ -515,8 +544,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
 
-                        // Dispatch Wayland frame callbacks across active outputs
-                        for output in &app.output_manager.outputs {
+                        // Dispatch Wayland frame callbacks — exactly ONE per
+                        // surface, via the primary output. Outputs are
+                        // mirrored (one logical scene laid out in the
+                        // primary's coordinate space), so iterating every
+                        // output sent N duplicate wl_callbacks per surface
+                        // per tick on multi-monitor: clients animated at N×
+                        // the intended rate.
+                        if let Some(primary) = app.output_manager.outputs.first() {
                             for surface in app.xdg_shell_state.toplevel_surfaces() {
                                 let is_on_inactive_ws = app
                                     .surfaces
@@ -529,10 +564,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if !is_on_inactive_ws {
                                     send_frames_surface_tree(
                                         surface.wl_surface(),
-                                        output,
+                                        primary,
                                         elapsed,
                                         None,
-                                        |_, _| Some(output.clone()),
+                                        |_, _| Some(primary.clone()),
                                     );
                                 }
                             }

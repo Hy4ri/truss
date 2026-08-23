@@ -8,7 +8,10 @@ use smithay::{
         },
         drm::{DrmDevice, DrmDeviceFd, DrmEvent, GbmBufferedSurface},
         egl::{EGLContext, EGLDisplay},
-        renderer::{gles::GlesRenderer, utils::draw_render_elements, Bind, Frame, Renderer},
+        renderer::{
+            damage::OutputDamageTracker, gles::GlesRenderer, utils::draw_render_elements, Bind,
+            Frame, Renderer,
+        },
         session::{libseat::LibSeatSession, Session},
     },
     output::Output,
@@ -39,6 +42,15 @@ pub struct DrmDisplay {
     /// While set, this display must not render again or the swapchain runs dry
     /// and in-progress buffers get scanned out mid-draw (flicker).
     pub pending_frame: bool,
+    /// Per-output damage tracker. Computes which screen region actually
+    /// changed since the buffer now being rendered into was last shown, so
+    /// only that region is cleared/drawn and passed as flip damage instead
+    /// of the full frame every time.
+    pub damage_tracker: OutputDamageTracker,
+    /// Set by `reset_state()` (VT switch resume): the next frame must be a
+    /// full redraw — both swapchain contents and the tracker's history are
+    /// invalid, so computed damage cannot be trusted until re-seeded.
+    pub force_full_redraw: bool,
 }
 
 impl DrmDisplay {
@@ -50,7 +62,7 @@ impl DrmDisplay {
             return Ok(());
         }
 
-        let (mut dmabuf, _age) = self
+        let (mut dmabuf, buffer_age) = self
             .gbm_surface
             .next_buffer()
             .map_err(|e| format!("DRM next_buffer failed: {e}"))?;
@@ -62,7 +74,56 @@ impl DrmDisplay {
 
         let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
         let size = (self.size.0, self.size.1).into();
-        let damage = Rectangle::from_size(size);
+        let full_damage = [Rectangle::from_size(size)];
+
+        // Ask the damage tracker what changed since the buffer we're about
+        // to render into was last scanned out. `None` means nothing visible
+        // changed at all — skip presenting instead of flipping an identical
+        // frame (the dominant cost on llvmpipe).
+        let force_full = self.force_full_redraw;
+        self.force_full_redraw = false;
+        let changed_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> = if force_full {
+            Some(vec![Rectangle::from_size(size)])
+        } else {
+            match self
+                .damage_tracker
+                .damage_output(buffer_age as usize, &elements)
+            {
+                Ok((Some(rects), _states)) => Some(rects.clone()),
+                Ok((None, _states)) => None,
+                Err(e) => {
+                    tracing::warn!(
+                        "truss: damage tracking failed, falling back to full redraw: {e}"
+                    );
+                    Some(vec![Rectangle::from_size(size)])
+                }
+            }
+        };
+
+        // Mirrored secondaries whose mode differs from the primary show the
+        // primary-coordinate-space scene scaled — per-region damage rects
+        // would land in the wrong place, so those displays keep full-frame
+        // redraws. Matched outputs (single-monitor, identical mirrors) get
+        // exact damage.
+        let primary_size = app
+            .output_manager
+            .outputs
+            .first()
+            .and_then(|o| o.current_mode())
+            .map(|m| (m.size.w, m.size.h));
+        let use_exact_damage = primary_size == Some(self.size);
+
+        let Some(damage) = changed_damage else {
+            // Nothing changed on screen — drop the acquired buffer without
+            // queueing it (next_buffer may be called again and returns the
+            // same buffer until queued).
+            return Ok(());
+        };
+        let damage_slice: &[Rectangle<i32, smithay::utils::Physical>] = if use_exact_damage {
+            &damage
+        } else {
+            &full_damage
+        };
 
         // Mirrored outputs share one logical scene laid out in the primary
         // output's coordinate space (windows, bar and cursor are all placed
@@ -92,10 +153,10 @@ impl DrmDisplay {
                 return Ok(());
             }
         };
-        if let Err(e) = frame.clear(app.bg_color, &[damage]) {
+        if let Err(e) = frame.clear(app.bg_color, damage_slice) {
             tracing::warn!("truss: DRM frame clear failed: {e}");
         }
-        if let Err(e) = draw_render_elements(&mut frame, scale, &elements, &[damage]) {
+        if let Err(e) = draw_render_elements(&mut frame, scale, &elements, damage_slice) {
             tracing::warn!("truss: DRM frame draw failed: {e}");
         }
         let sync = match frame.finish() {
@@ -110,8 +171,16 @@ impl DrmDisplay {
         // fence support (virtio-gpu) it CPU-waits for rendering to complete
         // before flipping; passing None lets the flip race the rasterizer and
         // presents half-drawn frames (observed as displaced stale blocks).
+        //
+        // The computed damage goes to the kernel too (atomic damage property)
+        // — but only for exact-damage displays; scaled mirrors flip full.
+        let flip_damage = if use_exact_damage {
+            Some(damage.clone())
+        } else {
+            None
+        };
         self.gbm_surface
-            .queue_buffer(sync, None, ())
+            .queue_buffer(sync, flip_damage, ())
             .map_err(|e| format!("DRM queue_buffer failed: {e}"))?;
         self.pending_frame = true;
         Ok(())
@@ -133,6 +202,12 @@ impl DrmDisplay {
         // Surface buffers were reclaimed by the kernel during the VT switch;
         // allow rendering again even if no final vblank arrived.
         self.pending_frame = false;
+        // The swapchain contents are gone with them: buffer ages are stale
+        // (every buffer now "infinitely old") and the damage tracker's
+        // history is invalid. Reset both so the next frame does a full
+        // redraw instead of trusting damage against reclaimed buffers.
+        self.gbm_surface.reset_buffer_ages();
+        self.force_full_redraw = true;
     }
 }
 
@@ -364,6 +439,8 @@ pub fn discover_and_init_drm_displays(
             );
             let _global = output.create_global::<App>(dh);
 
+            let damage_tracker = OutputDamageTracker::from_output(&output);
+
             displays.push(DrmDisplay {
                 name: conn_name,
                 card_id,
@@ -374,6 +451,8 @@ pub fn discover_and_init_drm_displays(
                 size: (width, height),
                 cursor_manager: crate::backend::cursor::CursorManager::new(),
                 pending_frame: false,
+                damage_tracker,
+                force_full_redraw: false,
             });
         }
 
