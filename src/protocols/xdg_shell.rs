@@ -112,6 +112,11 @@ impl XdgShellHandler for App {
                     }
                 }
             });
+            // Re-evaluate rules (title-based rules must fire on retitles)
+            // and redraw so the bar/panel reflects the new title.
+            self.apply_window_rules(id);
+            self.refresh_layout_and_space();
+            self.needs_redraw = true;
         }
     }
 
