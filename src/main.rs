@@ -429,7 +429,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // full-frame redraw.
                 let mut pending_submit: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
                     None;
->>>>>>> origin/main
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
                     let elements = truss::backend::collect_render_elements(
                         &app,
