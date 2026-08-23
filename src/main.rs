@@ -321,6 +321,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else {
                         state.pointer_state.end_drag();
+                        // Resize over: present whatever clients committed by
+                        // now instead of freezing output for the fail-safe
+                        // window waiting for stragglers.
+                        state.transaction_manager.force_complete_all();
+                        state.needs_redraw = true;
                         if let Some(pointer) = state.seat.get_pointer() {
                             pointer.button(
                                 state,
@@ -403,7 +408,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         while app.is_running() {
             let size = backend.window_size();
             let damage = Rectangle::from_size(size);
-            {
+            // Synchronized-resize: withhold presentation while a transaction
+            // is in flight so clients commit into one atomic visual update.
+            // Event dispatch below keeps running — client commits must be
+            // processed for the transaction to ever complete.
+            if app.transaction_manager.has_active_transactions() {
+                app.transaction_manager.prune_expired();
+            } else {
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
                     let elements = truss::backend::collect_render_elements(
                         &app,
@@ -419,8 +430,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = frame.finish();
                     }
                 }
+                let _ = backend.submit(Some(&[damage]));
             }
-            let _ = backend.submit(Some(&[damage]));
 
             let elapsed = start_time.elapsed();
             for surface in app.xdg_shell_state.toplevel_surfaces() {
@@ -462,10 +473,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while app.is_running() {
                     let elapsed = start_time.elapsed();
 
+                    // Expire stale transactions even without events; re-arm
+                    // redraw when the fail-safe releases the last one.
+                    if app.transaction_manager.has_active_transactions() {
+                        app.transaction_manager.prune_expired();
+                        if !app.transaction_manager.has_active_transactions() {
+                            app.needs_redraw = true;
+                        }
+                    }
+
                     // Render active physical DRM displays — but only when
                     // something actually changed. Vblank wakeups on an idle
                     // desktop must not queue page-flips (flicker + CPU burn).
-                    if app.needs_redraw || tty_backend.has_pending_frames() {
+                    //
+                    // While a synchronized-resize transaction is in flight,
+                    // presentation is withheld: showing a half-committed
+                    // layout (some windows resized, others not yet) is the
+                    // tearing these transactions exist to prevent. The final
+                    // commit re-arms needs_redraw and everything lands at once.
+                    if (app.needs_redraw || tty_backend.has_pending_frames())
+                        && !app.transaction_manager.has_active_transactions()
+                    {
                         app.needs_redraw = false;
                         for drm_display in &mut tty_backend.drm_displays {
                             if let Err(e) = drm_display.render_frame(&app) {

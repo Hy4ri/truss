@@ -270,6 +270,11 @@ impl TtyBackend {
                         }
                     } else {
                         state.pointer_state.end_drag();
+                        // Resize over: present whatever clients committed by
+                        // now instead of freezing output for the fail-safe
+                        // window waiting for stragglers.
+                        state.transaction_manager.force_complete_all();
+                        state.needs_redraw = true;
                         if let Some(pointer) = state.seat.get_pointer() {
                             pointer.button(
                                 state,
