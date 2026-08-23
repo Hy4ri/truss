@@ -420,6 +420,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 app.transaction_manager.prune_expired();
             } else {
                 let age = backend.buffer_age().unwrap_or(0);
+                // Damage-tracked redraw: None means nothing visible changed —
+                // skip render/submit entirely instead of flipping an identical
+                // frame every loop iteration. Tracker failure falls back to
+                // full-frame redraw.
+                let mut pending_submit: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
+                    None;
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
                     let elements = truss::backend::collect_render_elements(
                         &app,
@@ -427,10 +433,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &mut cursor_manager,
                     );
 
-                    // Damage-tracked redraw: None means nothing visible
-                    // changed — skip render/submit entirely instead of
-                    // flipping an identical frame every loop iteration.
-                    // Tracker failure falls back to full-frame redraw.
                     let render_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
                         match damage_tracker.damage_output(age, &elements) {
                             Ok((Some(rects), _)) => Some(rects.clone()),
@@ -451,8 +453,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 draw_render_elements(&mut frame, 1.0, &elements, &damage_rects);
                             let _ = frame.finish();
                         }
-                        let _ = backend.submit(Some(&damage_rects));
+                        pending_submit = Some(damage_rects);
                     }
+                }
+                if let Some(damage_rects) = pending_submit {
+                    let _ = backend.submit(Some(&damage_rects));
                 }
             }
 
