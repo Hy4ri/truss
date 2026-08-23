@@ -213,6 +213,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         &mut data.dispatcher,
                                         &mut data.state,
                                     );
+                                    // window.close only mutates state; actually ask
+                                    // the client to close its surface here.
+                                    for cid in data.dispatcher.take_pending_closes() {
+                                        if let Some(surface) = data.surfaces.get(&cid) {
+                                            surface.send_close();
+                                        }
+                                    }
                                     let new_focus = data.state.active_workspace().focused_window;
                                     data.set_focused_window(new_focus);
                                     FilterResult::Intercept(())

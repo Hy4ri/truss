@@ -114,6 +114,18 @@ impl IpcServer {
                                                                         app.set_focused_window(
                                                                             new_focus,
                                                                         );
+                                                                        // window.close only mutates
+                                                                        // state; ask the client to close.
+                                                                        for cid in app
+                                                                            .dispatcher
+                                                                            .take_pending_closes()
+                                                                        {
+                                                                            if let Some(surface) =
+                                                                                app.surfaces.get(&cid)
+                                                                            {
+                                                                                surface.send_close();
+                                                                            }
+                                                                        }
                                                                         IpcResponse::success(
                                                                             req.id, res,
                                                                         )
