@@ -102,4 +102,22 @@ impl TransactionManager {
             .values()
             .any(|tx| tx.committed_windows.contains(&window_id) && !tx.is_complete())
     }
+
+    /// True while any synchronized-resize transaction is in flight.
+    ///
+    /// Render loops consult this to withhold presentation until every
+    /// resized client has committed its new framebuffer (or the fail-safe
+    /// timeout expired) — the atomic-swap behavior transactions exist for.
+    pub fn has_active_transactions(&self) -> bool {
+        !self.active_transactions.is_empty()
+    }
+
+    /// Force-complete every active transaction.
+    ///
+    /// Used when a resize drag ends: whatever the clients committed by now
+    /// is presented immediately instead of freezing output for up to
+    /// TRANSACTION_TIMEOUT waiting for stragglers.
+    pub fn force_complete_all(&mut self) {
+        self.active_transactions.clear();
+    }
 }
