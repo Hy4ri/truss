@@ -308,11 +308,9 @@ impl App {
         }
 
         if !resized.is_empty() {
+            let count = resized.len();
             self.transaction_manager.create_transaction(resized);
-            tracing::debug!(
-                "truss: resize transaction opened for {} window(s)",
-                resized.len()
-            );
+            tracing::debug!("truss: resize transaction opened for {count} window(s)");
         }
 
         for (&id, surface) in &self.surfaces {
