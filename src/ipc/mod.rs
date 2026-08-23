@@ -87,13 +87,20 @@ impl IpcServer {
                                         // SAFETY: We only access the stream on the event loop thread
                                         let raw_stream = unsafe { stream_fd.get_mut() };
                                         let mut reader = BufReader::new(raw_stream);
-                                        let mut line = String::new();
+                                        // One reader for the whole drain pass. Rebuilding a fresh
+                                        // BufReader per readiness event silently dropped pipelined
+                                        // requests: the first read_line pulled ALL queued lines out
+                                        // of the kernel socket buffer into the reader's own buffer,
+                                        // and dropping it discarded everything past line one — no
+                                        // further readiness event ever fired afterwards.
+                                        loop {
+                                            let mut line = String::new();
 
-                                        match reader.read_line(&mut line) {
-                                            Ok(0) => {
-                                                // Client disconnected
-                                                Ok(PostAction::Remove)
-                                            }
+                                            match reader.read_line(&mut line) {
+                                                Ok(0) => {
+                                                    // Client disconnected
+                                                    return Ok(PostAction::Remove);
+                                                }
                                             Ok(_) => {
                                                 let trimmed = line.trim();
                                                 if !trimmed.is_empty() {
@@ -155,14 +162,16 @@ impl IpcServer {
                                                     }
                                                     app.refresh_layout_and_space();
                                                 }
-                                                Ok(PostAction::Continue)
                                             }
                                             Err(ref e)
-                                                if e.kind() == std::io::ErrorKind::WouldBlock =>
+                                                if e.kind()
+                                                    == std::io::ErrorKind::WouldBlock =>
                                             {
-                                                Ok(PostAction::Continue)
+                                                // Socket fully drained — stop the loop
+                                                break;
                                             }
-                                            Err(_) => Ok(PostAction::Remove),
+                                            Err(_) => return Ok(PostAction::Remove),
+                                        }
                                         }
                                     },
                                 );
