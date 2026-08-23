@@ -406,15 +406,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         while app.is_running() {
-            let size = backend.window_size();
-            let damage = Rectangle::from_size(size);
-            // Synchronized-resize: withhold presentation while a transaction
-            // is in flight so clients commit into one atomic visual update.
-            // Event dispatch below keeps running — client commits must be
-            // processed for the transaction to ever complete.
-            if app.transaction_manager.has_active_transactions() {
-                app.transaction_manager.prune_expired();
-            } else {
+            // Render gate: only redraw when something actually changed
+            // (needs_redraw) and no synchronized-resize transaction is in
+            // flight. Without the dirty flag this loop rendered+submitted
+            // unconditionally every iteration — CPU/GPU burn while idle in
+            // nested mode, frame callbacks sent regardless of change.
+            if app.needs_redraw && !app.transaction_manager.has_active_transactions() {
+                app.needs_redraw = false;
+                let size = backend.window_size();
+                let damage = Rectangle::from_size(size);
                 if let Ok((renderer, mut framebuffer)) = backend.bind() {
                     let elements = truss::backend::collect_render_elements(
                         &app,
@@ -431,6 +431,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 let _ = backend.submit(Some(&[damage]));
+            } else if app.transaction_manager.has_active_transactions() {
+                app.transaction_manager.prune_expired();
             }
 
             let elapsed = start_time.elapsed();
