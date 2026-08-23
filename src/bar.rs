@@ -27,13 +27,30 @@ pub fn run_status_bar(socket_name: &str) -> Result<(), Box<dyn std::error::Error
                 let req_json = serde_json::to_string(&req)?;
                 stream.write_all(format!("{req_json}\n").as_bytes())?;
 
-                let mut buf = [0u8; 4096];
-                let n = stream.read(&mut buf)?;
-                if n > 0 {
-                    if let Ok(resp) = serde_json::from_slice::<IpcResponse>(&buf[..n]) {
-                        if let Some(crate::dispatch::DispatchResult::State(state)) = resp.result {
-                            render_bar_line(&state);
+                let mut acc: Vec<u8> = Vec::new();
+                let mut chunk = [0u8; 1024];
+                // JSONL-safe read: a single read() may return a partial
+                // response or several buffered lines. Read until we have at
+                // least one full newline-terminated line.
+                loop {
+                    match stream.read(&mut chunk) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            acc.extend_from_slice(&chunk[..n]);
+                            if acc.contains(&b'\n') {
+                                break;
+                            }
                         }
+                        Err(_) => break,
+                    }
+                }
+                let line = acc
+                    .split(|&b| b == b'\n')
+                    .find(|l| !l.is_empty())
+                    .unwrap_or(&[]);
+                if let Ok(resp) = serde_json::from_slice::<IpcResponse>(line) {
+                    if let Some(crate::dispatch::DispatchResult::State(state)) = resp.result {
+                        render_bar_line(&state);
                     }
                 }
             }
@@ -83,12 +100,53 @@ fn render_bar_line(state: &State) {
 
 fn chrono_or_fallback_time() -> String {
     let now = std::time::SystemTime::now();
-    let dur = now
+    let secs = now
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = dur.as_secs();
-    let hours = (secs / 3600) % 24;
-    let minutes = (secs / 60) % 60;
-    let seconds = secs % 60;
-    format!("{hours:02}:{minutes:02}:{seconds:02} UTC")
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Local wall-clock time via libc (respects TZ), no chrono dependency.
+    #[repr(C)]
+    struct Tm {
+        tm_sec: libc::c_int,
+        tm_min: libc::c_int,
+        tm_hour: libc::c_int,
+        tm_mday: libc::c_int,
+        tm_mon: libc::c_int,
+        tm_year: libc::c_int,
+        tm_wday: libc::c_int,
+        tm_yday: libc::c_int,
+        tm_isdst: libc::c_int,
+        tm_gmtoff: libc::c_long,
+        tm_zone: *const libc::c_char,
+    }
+    extern "C" {
+        fn localtime_r(timep: *const libc::time_t, result: *mut Tm) -> *mut Tm;
+    }
+    let mut tm = Tm {
+        tm_sec: 0,
+        tm_min: 0,
+        tm_hour: 0,
+        tm_mday: 0,
+        tm_mon: 0,
+        tm_year: 0,
+        tm_wday: 0,
+        tm_yday: 0,
+        tm_isdst: 0,
+        tm_gmtoff: 0,
+        tm_zone: std::ptr::null(),
+    };
+    let t = secs as libc::time_t;
+    // SAFETY: `t` is a valid time_t and `tm` is a fully-owned Tm allocation.
+    if unsafe {
+        localtime_r(
+            &t as *const libc::time_t,
+            &mut tm as *mut Tm as *mut libc::tm,
+        )
+    }
+    .is_null()
+    {
+        return format!("{secs} epoch");
+    }
+    let (hours, minutes, seconds) = (tm.tm_hour, tm.tm_min, tm.tm_sec);
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
