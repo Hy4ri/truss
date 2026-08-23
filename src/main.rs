@@ -513,8 +513,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
 
-                        // Dispatch Wayland frame callbacks across active outputs
-                        for output in &app.output_manager.outputs {
+                        // Dispatch Wayland frame callbacks — exactly ONE per
+                        // surface, via the primary output. Outputs are
+                        // mirrored (one logical scene laid out in the
+                        // primary's coordinate space), so iterating every
+                        // output sent N duplicate wl_callbacks per surface
+                        // per tick on multi-monitor: clients animated at N×
+                        // the intended rate.
+                        if let Some(primary) = app.output_manager.outputs.first() {
                             for surface in app.xdg_shell_state.toplevel_surfaces() {
                                 let is_on_inactive_ws = app
                                     .surfaces
@@ -527,10 +533,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 if !is_on_inactive_ws {
                                     send_frames_surface_tree(
                                         surface.wl_surface(),
-                                        output,
+                                        primary,
                                         elapsed,
                                         None,
-                                        |_, _| Some(output.clone()),
+                                        |_, _| Some(primary.clone()),
                                     );
                                 }
                             }
