@@ -87,82 +87,93 @@ impl IpcServer {
                                         // SAFETY: We only access the stream on the event loop thread
                                         let raw_stream = unsafe { stream_fd.get_mut() };
                                         let mut reader = BufReader::new(raw_stream);
-                                        let mut line = String::new();
+                                        // One reader for the whole drain pass. Rebuilding a fresh
+                                        // BufReader per readiness event silently dropped pipelined
+                                        // requests: the first read_line pulled ALL queued lines out
+                                        // of the kernel socket buffer into the reader's own buffer,
+                                        // and dropping it discarded everything past line one — no
+                                        // further readiness event ever fired afterwards.
+                                        loop {
+                                            let mut line = String::new();
 
-                                        match reader.read_line(&mut line) {
-                                            Ok(0) => {
-                                                // Client disconnected
-                                                Ok(PostAction::Remove)
-                                            }
-                                            Ok(_) => {
-                                                let trimmed = line.trim();
-                                                if !trimmed.is_empty() {
-                                                    let response = match serde_json::from_str::<
-                                                        IpcRequest,
-                                                    >(
-                                                        trimmed
-                                                    ) {
-                                                        Ok(req) => {
-                                                            match app.dispatcher.dispatch(
-                                                                &mut app.state,
-                                                                req.command,
-                                                            ) {
-                                                                Ok(res) => {
-                                                                    let new_focus = app
-                                                                        .state
-                                                                        .active_workspace()
-                                                                        .focused_window;
-                                                                    app.set_focused_window(
-                                                                        new_focus,
-                                                                    );
-                                                                    // window.close only mutates
-                                                                    // state; ask the client to close.
-                                                                    for cid in app
-                                                                        .dispatcher
-                                                                        .take_pending_closes()
-                                                                    {
-                                                                        if let Some(surface) =
-                                                                            app.surfaces.get(&cid)
+                                            match reader.read_line(&mut line) {
+                                                Ok(0) => {
+                                                    // Client disconnected
+                                                    return Ok(PostAction::Remove);
+                                                }
+                                                Ok(_) => {
+                                                    let trimmed = line.trim();
+                                                    if !trimmed.is_empty() {
+                                                        let response = match serde_json::from_str::<
+                                                            IpcRequest,
+                                                        >(
+                                                            trimmed
+                                                        ) {
+                                                            Ok(req) => {
+                                                                match app.dispatcher.dispatch(
+                                                                    &mut app.state,
+                                                                    req.command,
+                                                                ) {
+                                                                    Ok(res) => {
+                                                                        let new_focus = app
+                                                                            .state
+                                                                            .active_workspace()
+                                                                            .focused_window;
+                                                                        app.set_focused_window(
+                                                                            new_focus,
+                                                                        );
+                                                                        // window.close only mutates
+                                                                        // state; ask the client to close.
+                                                                        for cid in app
+                                                                            .dispatcher
+                                                                            .take_pending_closes()
                                                                         {
-                                                                            surface.send_close();
+                                                                            if let Some(surface) =
+                                                                                app.surfaces
+                                                                                    .get(&cid)
+                                                                            {
+                                                                                surface
+                                                                                    .send_close();
+                                                                            }
                                                                         }
+                                                                        IpcResponse::success(
+                                                                            req.id, res,
+                                                                        )
                                                                     }
-                                                                    IpcResponse::success(
-                                                                        req.id, res,
-                                                                    )
-                                                                }
-                                                                Err(err) => {
-                                                                    IpcResponse::error(req.id, err)
+                                                                    Err(err) => IpcResponse::error(
+                                                                        req.id, err,
+                                                                    ),
                                                                 }
                                                             }
-                                                        }
-                                                        Err(parse_err) => IpcResponse {
-                                                            id: None,
-                                                            ok: false,
-                                                            result: None,
-                                                            error: Some(format!(
+                                                            Err(parse_err) => IpcResponse {
+                                                                id: None,
+                                                                ok: false,
+                                                                result: None,
+                                                                error: Some(format!(
                                                                 "Invalid JSON request: {parse_err}"
                                                             )),
-                                                        },
-                                                    };
+                                                            },
+                                                        };
 
-                                                    if let Ok(resp_json) =
-                                                        serde_json::to_string(&response)
-                                                    {
-                                                        let _ = stream_writer.write_all(
-                                                            format!("{resp_json}\n").as_bytes(),
-                                                        );
+                                                        if let Ok(resp_json) =
+                                                            serde_json::to_string(&response)
+                                                        {
+                                                            let _ = stream_writer.write_all(
+                                                                format!("{resp_json}\n").as_bytes(),
+                                                            );
+                                                        }
+                                                        app.refresh_layout_and_space();
                                                     }
-                                                    app.refresh_layout_and_space();
                                                 }
-                                                Ok(PostAction::Continue)
+                                                Err(ref e)
+                                                    if e.kind()
+                                                        == std::io::ErrorKind::WouldBlock =>
+                                                {
+                                                    // Socket fully drained — stop the loop
+                                                    break Ok(PostAction::Continue);
+                                                }
+                                                Err(_) => return Ok(PostAction::Remove),
                                             }
-                                            Err(ref e)
-                                                if e.kind() == std::io::ErrorKind::WouldBlock =>
-                                            {
-                                                Ok(PostAction::Continue)
-                                            }
-                                            Err(_) => Ok(PostAction::Remove),
                                         }
                                     },
                                 );
