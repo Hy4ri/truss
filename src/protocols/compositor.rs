@@ -69,6 +69,17 @@ impl CompositorHandler for App {
         {
             self.transaction_manager.on_surface_commit(win_id);
             self.needs_redraw = true;
+        } else if self.output_manager.outputs.iter().any(|output| {
+            use smithay::desktop::layer_map_for_output;
+            layer_map_for_output(output)
+                .layers()
+                .any(|layer| layer.wl_surface() == surface)
+        }) {
+            // Layer-shell commit (bar, notification daemon). These are not
+            // tracked toplevels, so without this the bar's own updates
+            // (clock ticks!) never repaint on the render-on-demand TTY
+            // backend until some unrelated event flags a redraw.
+            self.needs_redraw = true;
         }
     }
 }
