@@ -14,6 +14,6 @@ fn test_cursor_manager_initialization_and_fallback() {
 #[test]
 fn test_app_cursor_status_lifecycle() {
     let mut display: Display<App> = Display::new().unwrap();
-    let app = App::new(&mut display).unwrap();
+    let app = App::new(&mut display, "test.sock").unwrap();
     assert_eq!(app.cursor_status, CursorImageStatus::default_named());
 }

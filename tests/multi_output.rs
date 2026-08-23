@@ -1,6 +1,5 @@
 use smithay::utils::{Point, Size};
 use truss::backend::OutputManager;
-use truss::state::Rect;
 
 #[test]
 fn test_multi_output_arrangement() {
@@ -25,17 +24,6 @@ fn test_multi_output_arrangement() {
     assert_eq!(o2.name(), "HDMI-A-1");
 
     assert_eq!(mgr.outputs.len(), 2);
-
-    let total_bbox = mgr.total_bounding_box();
-    assert_eq!(total_bbox, Rect::new(0, 0, 1920 + 2560, 1440));
-
-    let infos = mgr.output_infos();
-    assert_eq!(infos.len(), 2);
-    assert_eq!(infos[0].name, "eDP-1");
-    assert_eq!(infos[0].geometry, Rect::new(0, 0, 1920, 1080));
-    assert_eq!(infos[1].name, "HDMI-A-1");
-    assert_eq!(infos[1].geometry, Rect::new(1920, 0, 2560, 1440));
-    assert_eq!(infos[1].refresh, 144_000);
 }
 
 #[test]

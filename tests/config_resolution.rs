@@ -139,7 +139,7 @@ fn test_settings_applied() {
 
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
     cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
 
     assert_eq!(app.dispatcher.layout_config.gap, 16);
@@ -157,7 +157,7 @@ fn test_invalid_setting_warns() {
 
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
     cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
 
     assert_eq!(app.dispatcher.layout_config.gap, 8);
@@ -251,7 +251,7 @@ fn test_parse_hex_color_unicode_safe() {
 
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
-    let mut app = App::new(&mut display).unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
     cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
 
     assert!((app.bg_color.r() - 0.08).abs() < 1e-6);

@@ -5,7 +5,7 @@ use truss::App;
 #[test]
 fn test_layer_map_exclusive_zone_and_usable_area() {
     let mut display: Display<App> = Display::new().unwrap();
-    let app = App::new(&mut display).unwrap();
+    let app = App::new(&mut display, "test.sock").unwrap();
 
     let usable_area = app.output_manager.primary_usable_area();
     assert_eq!(usable_area.width, 1920);
