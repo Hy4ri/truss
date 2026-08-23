@@ -8,7 +8,7 @@ pub use command::{Command, Direction};
 pub use event::Event;
 
 use crate::layout::{LayoutConfig, LayoutRegistry};
-use crate::state::{Rect, State, StateError};
+use crate::state::{Rect, State, StateError, WindowId};
 
 #[derive(Debug, Error, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DispatchError {
@@ -41,6 +41,14 @@ pub struct Dispatcher {
     subscribers: Vec<Subscriber>,
     pub layout_registry: LayoutRegistry,
     pub layout_config: LayoutConfig,
+    /// Window IDs whose close was requested while executing commands.
+    ///
+    /// The dispatcher is pure state (no access to Wayland surfaces), so
+    /// `window.close` can only remove state here. Each execution door (IPC,
+    /// keybinds) drains this queue afterwards and resolves the actual
+    /// `ToplevelSurface` to `send_close()` the client. Queued (not executed
+    /// inline) so command lists / macros stay atomic.
+    pending_closes: Vec<WindowId>,
 }
 
 impl Default for Dispatcher {
@@ -55,6 +63,7 @@ impl Dispatcher {
             subscribers: Vec::new(),
             layout_registry: LayoutRegistry::new(),
             layout_config: LayoutConfig::default(),
+            pending_closes: Vec::new(),
         }
     }
 
@@ -69,6 +78,15 @@ impl Dispatcher {
         for sub in &mut self.subscribers {
             sub(event);
         }
+    }
+
+    /// Take all window IDs queued for close by `Command::WindowClose`.
+    ///
+    /// Callers with surface access (IPC source, keybind handlers) must call
+    /// this after every dispatch batch and `send_close()` each remaining
+    /// `ToplevelSurface` — otherwise the client process leaks forever.
+    pub fn take_pending_closes(&mut self) -> Vec<WindowId> {
+        std::mem::take(&mut self.pending_closes)
     }
 
     /// Recalculate geometries of all tiled windows on a given workspace within a usable display area.
@@ -172,6 +190,7 @@ impl Dispatcher {
                 };
                 state.remove_window(win_id)?;
                 self.broadcast(&Event::WindowDestroyed { id: win_id });
+                self.pending_closes.push(win_id);
                 Ok(DispatchResult::Ok)
             }
 

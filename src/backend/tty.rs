@@ -134,6 +134,13 @@ impl TtyBackend {
                                         &mut data.dispatcher,
                                         &mut data.state,
                                     );
+                                    // window.close only mutates state; actually ask
+                                    // the client to close its surface here.
+                                    for cid in data.dispatcher.take_pending_closes() {
+                                        if let Some(surface) = data.surfaces.get(&cid) {
+                                            surface.send_close();
+                                        }
+                                    }
                                     let new_focus = data.state.active_workspace().focused_window;
                                     data.set_focused_window(new_focus);
                                     FilterResult::Intercept(())
@@ -268,6 +275,11 @@ impl TtyBackend {
                         }
                     } else {
                         state.pointer_state.end_drag();
+                        // Resize over: present whatever clients committed by
+                        // now instead of freezing output for the fail-safe
+                        // window waiting for stragglers.
+                        state.transaction_manager.force_complete_all();
+                        state.needs_redraw = true;
                         if let Some(pointer) = state.seat.get_pointer() {
                             pointer.button(
                                 state,

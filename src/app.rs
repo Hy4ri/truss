@@ -262,11 +262,17 @@ impl App {
         let focused = self.state.active_workspace().focused_window;
         let bounds_size = smithay::utils::Size::from((area.width as i32, area.height as i32));
 
+        // Synchronized-resize: collect every window whose configured size
+        // actually changed this pass. If any changed, register a transaction
+        // covering all of them; the render loops withhold presentation until
+        // each window commits its new framebuffer (fail-safe: 300ms).
+        let mut resized: Vec<crate::state::WindowId> = Vec::new();
         for (&id, surface) in &self.surfaces {
             if let Some(win) = self.state.windows.get(&id) {
                 let is_on_active_ws = win.workspace_id == active_ws;
                 let is_active = is_on_active_ws && Some(id) == focused;
 
+                let mut size_changed = false;
                 surface.with_pending_state(|state| {
                     use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::State;
 
@@ -288,9 +294,12 @@ impl App {
                         state.states.set(State::TiledTop);
                         state.states.set(State::TiledBottom);
                         state.bounds = Some(bounds_size);
-                        state.size = Some(
-                            (win.geometry.width as i32, win.geometry.height as i32).into(),
-                        );
+                        let new_size: smithay::utils::Size<i32, smithay::utils::Logical> =
+                            (win.geometry.width as i32, win.geometry.height as i32).into();
+                        if state.size != Some(new_size) {
+                            size_changed = true;
+                        }
+                        state.size = Some(new_size);
                     } else {
                         state.states.unset(State::TiledLeft);
                         state.states.unset(State::TiledRight);
@@ -298,6 +307,20 @@ impl App {
                         state.states.unset(State::TiledBottom);
                     }
                 });
+                if size_changed {
+                    resized.push(id);
+                }
+            }
+        }
+
+        if !resized.is_empty() {
+            let count = resized.len();
+            self.transaction_manager.create_transaction(resized);
+            tracing::debug!("truss: resize transaction opened for {count} window(s)");
+        }
+
+        for (&id, surface) in &self.surfaces {
+            if self.state.windows.contains_key(&id) {
                 surface.send_configure();
             }
         }
