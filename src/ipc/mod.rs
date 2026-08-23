@@ -101,77 +101,79 @@ impl IpcServer {
                                                     // Client disconnected
                                                     return Ok(PostAction::Remove);
                                                 }
-                                            Ok(_) => {
-                                                let trimmed = line.trim();
-                                                if !trimmed.is_empty() {
-                                                    let response = match serde_json::from_str::<
-                                                        IpcRequest,
-                                                    >(
-                                                        trimmed
-                                                    ) {
-                                                        Ok(req) => {
-                                                            match app.dispatcher.dispatch(
-                                                                &mut app.state,
-                                                                req.command,
-                                                            ) {
-                                                                Ok(res) => {
-                                                                    let new_focus = app
-                                                                        .state
-                                                                        .active_workspace()
-                                                                        .focused_window;
-                                                                    app.set_focused_window(
-                                                                        new_focus,
-                                                                    );
-                                                                    // window.close only mutates
-                                                                    // state; ask the client to close.
-                                                                    for cid in app
-                                                                        .dispatcher
-                                                                        .take_pending_closes()
-                                                                    {
-                                                                        if let Some(surface) =
-                                                                            app.surfaces.get(&cid)
+                                                Ok(_) => {
+                                                    let trimmed = line.trim();
+                                                    if !trimmed.is_empty() {
+                                                        let response = match serde_json::from_str::<
+                                                            IpcRequest,
+                                                        >(
+                                                            trimmed
+                                                        ) {
+                                                            Ok(req) => {
+                                                                match app.dispatcher.dispatch(
+                                                                    &mut app.state,
+                                                                    req.command,
+                                                                ) {
+                                                                    Ok(res) => {
+                                                                        let new_focus = app
+                                                                            .state
+                                                                            .active_workspace()
+                                                                            .focused_window;
+                                                                        app.set_focused_window(
+                                                                            new_focus,
+                                                                        );
+                                                                        // window.close only mutates
+                                                                        // state; ask the client to close.
+                                                                        for cid in app
+                                                                            .dispatcher
+                                                                            .take_pending_closes()
                                                                         {
-                                                                            surface.send_close();
+                                                                            if let Some(surface) =
+                                                                                app.surfaces
+                                                                                    .get(&cid)
+                                                                            {
+                                                                                surface
+                                                                                    .send_close();
+                                                                            }
                                                                         }
+                                                                        IpcResponse::success(
+                                                                            req.id, res,
+                                                                        )
                                                                     }
-                                                                    IpcResponse::success(
-                                                                        req.id, res,
-                                                                    )
-                                                                }
-                                                                Err(err) => {
-                                                                    IpcResponse::error(req.id, err)
+                                                                    Err(err) => IpcResponse::error(
+                                                                        req.id, err,
+                                                                    ),
                                                                 }
                                                             }
-                                                        }
-                                                        Err(parse_err) => IpcResponse {
-                                                            id: None,
-                                                            ok: false,
-                                                            result: None,
-                                                            error: Some(format!(
+                                                            Err(parse_err) => IpcResponse {
+                                                                id: None,
+                                                                ok: false,
+                                                                result: None,
+                                                                error: Some(format!(
                                                                 "Invalid JSON request: {parse_err}"
                                                             )),
-                                                        },
-                                                    };
+                                                            },
+                                                        };
 
-                                                    if let Ok(resp_json) =
-                                                        serde_json::to_string(&response)
-                                                    {
-                                                        let _ = stream_writer.write_all(
-                                                            format!("{resp_json}\n").as_bytes(),
-                                                        );
+                                                        if let Ok(resp_json) =
+                                                            serde_json::to_string(&response)
+                                                        {
+                                                            let _ = stream_writer.write_all(
+                                                                format!("{resp_json}\n").as_bytes(),
+                                                            );
+                                                        }
+                                                        app.refresh_layout_and_space();
                                                     }
-                                                    app.refresh_layout_and_space();
                                                 }
+                                                Err(ref e)
+                                                    if e.kind()
+                                                        == std::io::ErrorKind::WouldBlock =>
+                                                {
+                                                    // Socket fully drained — stop the loop
+                                                    break Ok(PostAction::Continue);
+                                                }
+                                                Err(_) => return Ok(PostAction::Remove),
                                             }
-                                            Err(ref e)
-                                                if e.kind()
-                                                    == std::io::ErrorKind::WouldBlock =>
-                                            {
-                                                // Socket fully drained — stop the loop
-                                                break Ok(PostAction::Continue);
-                                            }
-                                            Err(_) => return Ok(PostAction::Remove),
-                                        }
                                         }
                                     },
                                 );
