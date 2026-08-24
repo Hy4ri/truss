@@ -1,5 +1,6 @@
 #!/bin/bash
 export RUST_LOG=info
+export LIBSEAT_BACKEND=logind
 # arch native gbm — flake exports NixOS paths (/run/opengl-driver) that break here
 export GBM_BACKENDS_PATH=/usr/lib/gbm
 unset __NIX_DIRENV_PROFILE_ENV

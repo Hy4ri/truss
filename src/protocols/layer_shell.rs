@@ -42,14 +42,22 @@ impl WlrLayerShellHandler for App {
 
             surface.with_pending_state(|state| {
                 if state.size.is_none() {
-                    let size = layer_map
-                        .layer_geometry(&desktop_surface)
-                        .map(|g| (g.size.w, g.size.h).into())
-                        .unwrap_or_else(|| {
-                            out.current_mode()
-                                .map(|m| (m.size.w, m.size.h).into())
-                                .unwrap_or((1920, 1080).into())
-                        });
+                    // At map time the client hasn't committed a size yet, so
+                    // layer_geometry() is a zero-sized rect (e.g. 0x0). That is
+                    // `Some(..)`, so the fallback below would NOT trigger and we
+                    // would configure the client with width=0 height=0. Clients
+                    // like fuzzel reject a 0x0 configure, never commit, and stay
+                    // invisible. Treat both "no geometry" AND "zero geometry" as
+                    // "unknown" and hand the client the output's full size so it
+                    // gets a real, non-zero configure to ack against.
+                    let geo = layer_map.layer_geometry(&desktop_surface);
+                    let size = match geo {
+                        Some(g) if g.size.w > 0 && g.size.h > 0 => (g.size.w, g.size.h).into(),
+                        _ => out
+                            .current_mode()
+                            .map(|m| (m.size.w, m.size.h).into())
+                            .unwrap_or((1920, 1080).into()),
+                    };
                     state.size = Some(size);
                 }
             });

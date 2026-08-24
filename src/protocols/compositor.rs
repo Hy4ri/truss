@@ -80,6 +80,15 @@ impl CompositorHandler for App {
             // (clock ticks!) never repaint on the render-on-demand TTY
             // backend until some unrelated event flags a redraw.
             self.needs_redraw = true;
+            // Re-arrange every output's layer map: the client just committed
+            // its real size, but layer geometry was last computed at map time
+            // (before the buffer existed). Without this, layer_geometry()
+            // stays zero and render.rs skips the surface -> invisible launcher.
+            use smithay::desktop::layer_map_for_output;
+            for output in &self.output_manager.outputs {
+                let mut lm = layer_map_for_output(output);
+                lm.arrange();
+            }
         }
     }
 }
