@@ -10,6 +10,10 @@ use tracing::{info, warn};
 use crate::App;
 
 impl WlrLayerShellHandler for App {
+    fn ack_configure(&mut self, surface: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface, configure: smithay::wayland::shell::wlr_layer::LayerSurfaceConfigure) {
+        tracing::info!("LUNA-ACK: layer surface ack_configure: {:?}", configure);
+        self.needs_redraw = true;
+    }
     fn shell_state(&mut self) -> &mut WlrLayerShellState {
         &mut self.layer_shell_state
     }
@@ -32,10 +36,15 @@ impl WlrLayerShellHandler for App {
             .or_else(|| self.output_manager.outputs.first())
             .cloned();
 
+        tracing::info!("LUNA-LAYER: target_output is {:?}, total outputs={}", target_output.as_ref().map(|o| o.name()), self.output_manager.outputs.len());
         if let Some(ref out) = target_output {
             let desktop_surface = DesktopLayerSurface::new(surface.clone(), namespace);
             let mut layer_map = layer_map_for_output(out);
-            if let Err(e) = layer_map.map_layer(&desktop_surface) {
+            tracing::info!("LUNA-LAYER: out ptr: {:p}, userdata ptr: {:p}, name: {}", out, out.user_data(), out.name());
+            tracing::info!("LUNA-MAP-BEFORE: layers count: {}", layer_map.layers().count());
+            let map_res = layer_map.map_layer(&desktop_surface);
+            tracing::info!("LUNA-MAP-AFTER: res: {:?}, layers count: {}", map_res, layer_map.layers().count());
+            if let Err(e) = map_res {
                 warn!("Failed to map layer surface: {e}");
             }
             let _ = layer_map.arrange();
@@ -64,6 +73,7 @@ impl WlrLayerShellHandler for App {
             surface.send_configure();
 
             self.refresh_layout_and_space();
+            self.needs_redraw = true;
         }
     }
 
@@ -81,6 +91,7 @@ impl WlrLayerShellHandler for App {
             let _ = layer_map.arrange();
         }
         self.refresh_layout_and_space();
+            self.needs_redraw = true;
     }
 }
 

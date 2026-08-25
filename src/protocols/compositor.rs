@@ -46,6 +46,7 @@ impl CompositorHandler for App {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        tracing::info!("LUNA-COMMIT: surface committed: {:?}", surface);
         on_commit_buffer_handler::<Self>(surface);
         self.popups.commit(surface);
 
@@ -87,6 +88,12 @@ impl CompositorHandler for App {
             use smithay::desktop::layer_map_for_output;
             for output in &self.output_manager.outputs {
                 let mut lm = layer_map_for_output(output);
+                let _ = lm.arrange();
+                for layer in lm.layers() {
+                    if layer.wl_surface() == surface {
+                        layer.layer_surface().send_configure();
+                    }
+                }
                 lm.arrange();
             }
         }

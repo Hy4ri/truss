@@ -483,6 +483,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             }
+            for output in &app.output_manager.outputs {
+                use smithay::desktop::layer_map_for_output;
+                let layer_map = layer_map_for_output(output);
+                for layer in layer_map.layers() {
+                    send_frames_surface_tree(
+                        layer.wl_surface(),
+                        &default_output,
+                        elapsed,
+                        None,
+                        |_, _| Some(default_output.clone()),
+                    );
+                }
+            }
 
             event_loop.dispatch(Duration::from_millis(500), &mut app)?;
             app.process_pending_events();
@@ -570,16 +583,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     );
                                 }
                             }
+
+                            // Also dispatch frame callbacks to all layer shell surfaces
+                            for output in &app.output_manager.outputs {
+                                use smithay::desktop::layer_map_for_output;
+                                let layer_map = layer_map_for_output(output);
+                                for layer in layer_map.layers() {
+                                    send_frames_surface_tree(
+                                        layer.wl_surface(),
+                                        primary,
+                                        elapsed,
+                                        None,
+                                        |_, _| Some(primary.clone()),
+                                    );
+                                }
+                            }
                         }
                     }
 
-                    // Sleep until a real event arrives (input, client, vblank,
-                    // timer). Rendering is paced by DRM vblanks, not by polling.
-                    event_loop.dispatch(Duration::from_millis(500), &mut app)?;
+                    // Dispatch client requests and flush before and after sleeping
+                    display.dispatch_clients(&mut app)?;
+                    display.flush_clients()?;
+
+                    // Sleep until a real event arrives (input, client, vblank, timer).
+                    event_loop.dispatch(Duration::from_millis(16), &mut app)?;
                     tty_backend.handle_vblanks();
                     app.process_pending_events();
                     display.dispatch_clients(&mut app)?;
                     display.flush_clients()?;
+
+                    if app.needs_redraw && !app.transaction_manager.has_active_transactions() {
+                        app.needs_redraw = false;
+                        for drm_display in &mut tty_backend.drm_displays {
+                            if let Err(e) = drm_display.render_frame(&app) {
+                                tracing::trace!("truss: DRM render frame error: {e}");
+                            }
+                        }
+                    }
                 }
             }
             Err(err) => {
