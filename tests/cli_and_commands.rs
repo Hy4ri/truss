@@ -65,6 +65,14 @@ fn test_dispatch_window_toggle_floating_and_fullscreen() {
         )
         .unwrap();
     assert!(state.windows.get(&win_id).unwrap().fullscreen);
+
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleMaximize { id: Some(win_id) },
+        )
+        .unwrap();
+    assert!(state.windows.get(&win_id).unwrap().maximized);
 }
 
 #[test]

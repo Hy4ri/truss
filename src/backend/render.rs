@@ -60,64 +60,20 @@ pub fn collect_render_elements(
         }
     }
 
-    // 2. Layer Shell Surfaces: Overlay & Top layers
-    for output in &app.output_manager.outputs {
-        let layer_map = layer_map_for_output(output);
-
-        for surface in layer_map
-            .layers_on(WlrLayer::Overlay)
-            .chain(layer_map.layers_on(WlrLayer::Top))
-        {
-            let geo = layer_map.layer_geometry(surface);
-            let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
-            let layer_elements = render_elements_from_surface_tree(
-                renderer,
-                surface.wl_surface(),
-                loc,
-                1.0,
-                1.0,
-                Kind::Unspecified,
-            );
-            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-        }
-    }
-
-    // Direct fallback: render all active layer surfaces registered in layer_shell_state
-    for layer_surface in app.layer_shell_state.layer_surfaces() {
-        let wl_surf = layer_surface.wl_surface();
-        // Avoid duplicate rendering if already rendered via LayerMap
-        let already_rendered = app.output_manager.outputs.iter().any(|o| {
-            layer_map_for_output(o)
-                .layers()
-                .any(|l| l.wl_surface() == wl_surf)
-        });
-        if !already_rendered {
-            let layer_elements = render_elements_from_surface_tree(
-                renderer,
-                wl_surf,
-                (0, 0),
-                1.0,
-                1.0,
-                Kind::Unspecified,
-            );
-            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-        }
-    }
-
-    // 3. Normal toplevel windows and popups in layout order. The workspace
-    // list is the source of truth for master/stack ordering; iterating all XDG
-    // surfaces here could render an unmapped or stale surface at (0, 0).
-    for &window_id in &app.state.active_workspace().windows {
+    // Helper closure to render a window and its popups and borders
+    let render_window_tree = |elements: &mut Vec<TrussRenderElement>,
+                              renderer: &mut GlesRenderer,
+                              window_id: crate::state::WindowId| {
         let (Some(surface), Some(window)) = (
             app.surfaces.get(&window_id),
             app.state.windows.get(&window_id),
         ) else {
-            continue;
+            return;
         };
 
         let win_geom = (window.geometry.x, window.geometry.y);
 
-        // Render associated popups first (above parent windows)
+        // Render associated popups first (above parent window)
         for (popup, popup_loc) in
             smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
         {
@@ -143,7 +99,7 @@ pub fn collect_render_elements(
         );
         elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
 
-        // Window borders for active and inactive windows
+        // Window borders for active and inactive windows (fullscreen windows omit borders)
         if app.border_config.width > 0 && !window.fullscreen {
             let b = app.border_config.width as i32;
             let (x, y) = win_geom;
@@ -198,6 +154,78 @@ pub fn collect_render_elements(
                     Kind::Unspecified,
                 ),
             ));
+        }
+    };
+
+    let active_ws = app.state.active_workspace();
+
+    // 2. Fullscreen Windows (TOP-MOST: max on top, even covers Overlay & Top layers/bar)
+    for &window_id in active_ws.windows.iter().rev() {
+        if let Some(win) = app.state.windows.get(&window_id) {
+            if win.fullscreen {
+                render_window_tree(&mut elements, renderer, window_id);
+            }
+        }
+    }
+
+    // 3. Layer Shell Surfaces: Overlay & Top layers (e.g. Waybar, notifications, launchers)
+    for output in &app.output_manager.outputs {
+        let layer_map = layer_map_for_output(output);
+
+        for surface in layer_map
+            .layers_on(WlrLayer::Overlay)
+            .chain(layer_map.layers_on(WlrLayer::Top))
+        {
+            let geo = layer_map.layer_geometry(surface);
+            let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                surface.wl_surface(),
+                loc,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
+        }
+    }
+
+    // Direct fallback: render all active layer surfaces registered in layer_shell_state
+    for layer_surface in app.layer_shell_state.layer_surfaces() {
+        let wl_surf = layer_surface.wl_surface();
+        let already_rendered = app.output_manager.outputs.iter().any(|o| {
+            layer_map_for_output(o)
+                .layers()
+                .any(|l| l.wl_surface() == wl_surf)
+        });
+        if !already_rendered {
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                wl_surf,
+                (0, 0),
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
+        }
+    }
+
+    // 4. Floating Windows (Always on top of tiled windows)
+    for &window_id in active_ws.windows.iter().rev() {
+        if let Some(win) = app.state.windows.get(&window_id) {
+            if win.floating && !win.fullscreen {
+                render_window_tree(&mut elements, renderer, window_id);
+            }
+        }
+    }
+
+    // 5. Tiled Windows (In layout master/stack order)
+    for &window_id in &active_ws.windows {
+        if let Some(win) = app.state.windows.get(&window_id) {
+            if !win.floating && !win.fullscreen {
+                render_window_tree(&mut elements, renderer, window_id);
+            }
         }
     }
 

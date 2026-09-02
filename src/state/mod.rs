@@ -166,6 +166,15 @@ impl State {
         Ok(window.fullscreen)
     }
 
+    pub fn toggle_maximized(&mut self, id: WindowId) -> Result<bool, StateError> {
+        let window = self
+            .windows
+            .get_mut(&id)
+            .ok_or(StateError::WindowNotFound(id))?;
+        window.maximized = !window.maximized;
+        Ok(window.maximized)
+    }
+
     pub fn set_window_geometry(&mut self, id: WindowId, rect: Rect) -> Result<(), StateError> {
         let window = self
             .windows

@@ -27,6 +27,9 @@ pub enum Command {
     #[serde(rename = "window.toggle_fullscreen")]
     WindowToggleFullscreen { id: Option<WindowId> },
 
+    #[serde(rename = "window.toggle_maximize")]
+    WindowToggleMaximize { id: Option<WindowId> },
+
     #[serde(rename = "window.move_to_workspace")]
     WindowMoveToWorkspace {
         window_id: Option<WindowId>,

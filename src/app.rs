@@ -272,9 +272,14 @@ impl App {
         self.transaction_manager.prune_expired();
 
         let area = self.output_manager.primary_usable_area();
+        let full_area = self.output_manager.primary_full_area();
         let active_ws = self.state.active_workspace_id;
-        self.dispatcher
-            .recalculate_workspace_layout(&mut self.state, active_ws, area);
+        self.dispatcher.recalculate_workspace_layout_with_full_area(
+            &mut self.state,
+            active_ws,
+            area,
+            full_area,
+        );
         self.render_manager
             .sync_windows(&self.state, &self.surfaces);
 
@@ -391,34 +396,36 @@ impl App {
         use smithay::desktop::layer_map_for_output;
         use smithay::wayland::shell::wlr_layer::Layer;
 
-        // 1. Overlay & Top Layer Shell surfaces
-        for output in &self.output_manager.outputs {
-            let layer_map = layer_map_for_output(output);
-            for layer in [Layer::Overlay, Layer::Top] {
-                if let Some(surface) = layer_map.layer_under(layer, point) {
-                    if let Some(geom) = layer_map.layer_geometry(surface) {
+        let active_ws = self.state.active_workspace_id;
+        let px = point.x as i32;
+        let py = point.y as i32;
+
+        let check_window_under = |win_id: WindowId| -> Option<(
+            smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+            smithay::utils::Point<f64, smithay::utils::Logical>,
+        )> {
+            if let Some(win) = self.state.windows.get(&win_id) {
+                let r = &win.geometry;
+                if px >= r.x && px < r.x + r.width as i32 && py >= r.y && py < r.y + r.height as i32
+                {
+                    if let Some(surface) = self.surfaces.get(&win_id) {
                         return Some((
                             surface.wl_surface().clone(),
-                            smithay::utils::Point::from((geom.loc.x as f64, geom.loc.y as f64)),
+                            smithay::utils::Point::from((r.x as f64, r.y as f64)),
                         ));
                     }
                 }
             }
-        }
+            None
+        };
 
-        // 2. Popups associated with toplevel windows on active workspace
-        let active_ws = self.state.active_workspace_id;
-        for surface in self.xdg_shell_state.toplevel_surfaces() {
-            let win_entry = self
-                .surfaces
-                .iter()
-                .find(|(_, s)| s.wl_surface() == surface.wl_surface())
-                .and_then(|(id, _)| self.state.windows.get(id));
-
-            if let Some(win) = win_entry {
-                if win.workspace_id != active_ws {
-                    continue;
-                }
+        let check_popups = |win_id: WindowId| -> Option<(
+            smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+            smithay::utils::Point<f64, smithay::utils::Logical>,
+        )> {
+            if let (Some(surface), Some(win)) =
+                (self.surfaces.get(&win_id), self.state.windows.get(&win_id))
+            {
                 let win_geom = (win.geometry.x, win.geometry.y);
                 for (popup, popup_loc) in
                     smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
@@ -441,25 +448,66 @@ impl App {
                     }
                 }
             }
-        }
+            None
+        };
 
-        // 3. Toplevel Windows on active workspace
-        let px = point.x as i32;
-        let py = point.y as i32;
+        // If a window is fullscreen, it takes precedence over even Overlay/Top layer surfaces (e.g. covers the bar)
         if let Some(ws) = self.state.workspaces.get(&active_ws) {
             for &win_id in ws.windows.iter().rev() {
                 if let Some(win) = self.state.windows.get(&win_id) {
-                    let r = &win.geometry;
-                    if px >= r.x
-                        && px < r.x + r.width as i32
-                        && py >= r.y
-                        && py < r.y + r.height as i32
-                    {
-                        if let Some(surface) = self.surfaces.get(&win_id) {
-                            return Some((
-                                surface.wl_surface().clone(),
-                                smithay::utils::Point::from((r.x as f64, r.y as f64)),
-                            ));
+                    if win.fullscreen {
+                        if let Some(hit) = check_popups(win_id) {
+                            return Some(hit);
+                        }
+                        if let Some(hit) = check_window_under(win_id) {
+                            return Some(hit);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Overlay & Top Layer Shell surfaces (e.g. Waybar, notifications, launchers)
+        for output in &self.output_manager.outputs {
+            let layer_map = layer_map_for_output(output);
+            for layer in [Layer::Overlay, Layer::Top] {
+                if let Some(surface) = layer_map.layer_under(layer, point) {
+                    if let Some(geom) = layer_map.layer_geometry(surface) {
+                        return Some((
+                            surface.wl_surface().clone(),
+                            smithay::utils::Point::from((geom.loc.x as f64, geom.loc.y as f64)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 2. Floating windows and their popups on active workspace (always on top of tiled)
+        if let Some(ws) = self.state.workspaces.get(&active_ws) {
+            for &win_id in ws.windows.iter().rev() {
+                if let Some(win) = self.state.windows.get(&win_id) {
+                    if win.floating && !win.fullscreen {
+                        if let Some(hit) = check_popups(win_id) {
+                            return Some(hit);
+                        }
+                        if let Some(hit) = check_window_under(win_id) {
+                            return Some(hit);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Tiled windows and their popups on active workspace
+        if let Some(ws) = self.state.workspaces.get(&active_ws) {
+            for &win_id in ws.windows.iter().rev() {
+                if let Some(win) = self.state.windows.get(&win_id) {
+                    if !win.floating && !win.fullscreen {
+                        if let Some(hit) = check_popups(win_id) {
+                            return Some(hit);
+                        }
+                        if let Some(hit) = check_window_under(win_id) {
+                            return Some(hit);
                         }
                     }
                 }

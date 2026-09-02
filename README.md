@@ -84,8 +84,9 @@ truss bar
 | `Super + D` | `Spawn("fuzzel")` | Launch application menu |
 | `Super + Q` | `WindowClose` | Close focused window |
 | `Super + Shift + Q` | `CompositorQuit` | Gracefully shut down compositor |
-| `Super + F` | `WindowToggleFullscreen` | Toggle fullscreen on focused window |
-| `Super + Shift + Space` | `WindowToggleFloating` | Toggle floating mode on focused window |
+| `Super + f` | `WindowToggleFullscreen` | Toggle fullscreen mode (max on top, covers status bar and all outputs) |
+| `Super + m` | `WindowToggleMaximize` | Toggle maximized mode (fills workspace area below status bar) |
+| `Super + Shift + Space` | `WindowToggleFloating` | Toggle floating state for focused window |
 | `Super + J` | `WindowFocusDir(Next)` | Focus next window in layout |
 | `Super + K` | `WindowFocusDir(Prev)` | Focus previous window in layout |
 | `Super + Space` | `WindowSwapMaster` | Swap currently focused window with master |
