@@ -304,18 +304,26 @@ impl App {
                         state.states.unset(State::Fullscreen);
                     }
 
-                    if is_on_active_ws && !win.floating {
-                        state.states.set(State::TiledLeft);
-                        state.states.set(State::TiledRight);
-                        state.states.set(State::TiledTop);
-                        state.states.set(State::TiledBottom);
-                        state.bounds = Some(bounds_size);
+                    if is_on_active_ws {
                         let new_size: smithay::utils::Size<i32, smithay::utils::Logical> =
                             (win.geometry.width as i32, win.geometry.height as i32).into();
                         if state.size != Some(new_size) {
                             size_changed = true;
                         }
                         state.size = Some(new_size);
+
+                        if !win.floating {
+                            state.states.set(State::TiledLeft);
+                            state.states.set(State::TiledRight);
+                            state.states.set(State::TiledTop);
+                            state.states.set(State::TiledBottom);
+                            state.bounds = Some(bounds_size);
+                        } else {
+                            state.states.unset(State::TiledLeft);
+                            state.states.unset(State::TiledRight);
+                            state.states.unset(State::TiledTop);
+                            state.states.unset(State::TiledBottom);
+                        }
                     } else {
                         state.states.unset(State::TiledLeft);
                         state.states.unset(State::TiledRight);

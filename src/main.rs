@@ -343,7 +343,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     } else {
+                        let dragged_window = match state.pointer_state.drag {
+                            PointerDragMode::Move { window_id, .. }
+                            | PointerDragMode::Resize { window_id, .. } => Some(window_id),
+                            PointerDragMode::None => None,
+                        };
                         state.pointer_state.end_drag();
+
+                        // If dragged window was tiled, snap it back to layout
+                        if let Some(win_id) = dragged_window {
+                            if let Some(win) = state.state.windows.get(&win_id) {
+                                if !win.floating {
+                                    state.refresh_layout_and_space();
+                                }
+                            }
+                        }
+
                         // Resize over: present whatever clients committed by
                         // now instead of freezing output for the fail-safe
                         // window waiting for stragglers.

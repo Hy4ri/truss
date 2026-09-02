@@ -113,7 +113,6 @@ impl PointerState {
                     let dy = (self.location.y - start_pointer.y) as i32;
                     win.geometry.x = initial_geom.x + dx;
                     win.geometry.y = initial_geom.y + dy;
-                    win.floating = true;
                 }
             }
             PointerDragMode::Resize {
@@ -126,7 +125,6 @@ impl PointerState {
                     let dy = (self.location.y - start_pointer.y) as i32;
                     win.geometry.width = (initial_geom.width as i32 + dx).max(100) as u32;
                     win.geometry.height = (initial_geom.height as i32 + dy).max(100) as u32;
-                    win.floating = true;
                 }
             }
             PointerDragMode::None => {}
