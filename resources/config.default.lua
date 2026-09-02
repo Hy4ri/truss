@@ -67,7 +67,7 @@ truss.window_rule("display-settings", {
 -- truss.spawn_at_startup("swaybg -c '#14141a'")
 
 -- Launch status bar (e.g. waybar or truss bar)
--- truss.spawn_at_startup("waybar")
+truss.spawn_at_startup("waybar")
 
 -- Launch notification daemon
 -- truss.spawn_at_startup("mako")
