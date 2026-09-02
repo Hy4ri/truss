@@ -140,13 +140,49 @@ fn test_settings_applied() {
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
     let mut app = App::new(&mut display, "test.sock").unwrap();
-    cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+    );
 
     assert_eq!(app.dispatcher.layout_config.gap, 16);
     assert!((app.bg_color.r() - 1.0).abs() < 1e-6);
     assert!(app.bg_color.g().abs() < 1e-6);
     assert!(app.bg_color.b().abs() < 1e-6);
     assert_eq!(app.bg_color.a(), 1.0);
+}
+
+#[test]
+fn test_border_settings_applied() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r##"
+        truss.set("border_width", 4)
+        truss.set("active_border_color", "#ff00ff")
+        truss.set("inactive_border_color", "#00ff00")
+    "##,
+    )
+    .unwrap();
+
+    let _guard = APP_LOCK.lock().unwrap();
+    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+    );
+
+    assert_eq!(app.border_config.width, 4);
+    assert!((app.border_config.active_color.r() - 1.0).abs() < 1e-6);
+    assert!(app.border_config.active_color.g().abs() < 1e-6);
+    assert!((app.border_config.active_color.b() - 1.0).abs() < 1e-6);
+    assert!(app.border_config.inactive_color.r().abs() < 1e-6);
+    assert!((app.border_config.inactive_color.g() - 1.0).abs() < 1e-6);
+    assert!(app.border_config.inactive_color.b().abs() < 1e-6);
 }
 
 #[test]
@@ -158,7 +194,12 @@ fn test_invalid_setting_warns() {
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
     let mut app = App::new(&mut display, "test.sock").unwrap();
-    cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+    );
 
     assert_eq!(app.dispatcher.layout_config.gap, 8);
     assert!((app.bg_color.r() - 0.08).abs() < 1e-6);
@@ -252,7 +293,12 @@ fn test_parse_hex_color_unicode_safe() {
     let _guard = APP_LOCK.lock().unwrap();
     let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
     let mut app = App::new(&mut display, "test.sock").unwrap();
-    cfg.apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+    );
 
     assert!((app.bg_color.r() - 0.08).abs() < 1e-6);
     assert!((app.bg_color.g() - 0.08).abs() < 1e-6);

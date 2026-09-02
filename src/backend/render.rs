@@ -1,4 +1,5 @@
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
+use smithay::backend::renderer::element::solid::{SolidColorBuffer, SolidColorRenderElement};
 use smithay::backend::renderer::element::surface::{
     render_elements_from_surface_tree, WaylandSurfaceRenderElement,
 };
@@ -12,12 +13,13 @@ use smithay::wayland::shell::wlr_layer::Layer as WlrLayer;
 use crate::backend::cursor::CursorManager;
 use crate::App;
 
-// Unified render element enum that can hold both Wayland surface elements
-// and memory-buffer-backed cursor elements.
+// Unified render element enum that can hold Wayland surface elements,
+// memory-buffer-backed cursor elements, and solid color borders.
 render_elements! {
     pub TrussRenderElement<=GlesRenderer>;
     Surface=WaylandSurfaceRenderElement<GlesRenderer>,
     Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
+    Solid=SolidColorRenderElement,
 }
 
 /// Extract all render elements (cursor, overlay, top, popups, toplevel windows, bottom, background)
@@ -140,6 +142,63 @@ pub fn collect_render_elements(
             Kind::Unspecified,
         );
         elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
+
+        // Window borders for active and inactive windows
+        if app.border_config.width > 0 && !window.fullscreen {
+            let b = app.border_config.width as i32;
+            let (x, y) = win_geom;
+            let (w, h) = (window.geometry.width as i32, window.geometry.height as i32);
+            let is_active = Some(window_id) == app.state.active_workspace().focused_window;
+            let border_color = if is_active {
+                app.border_config.active_color
+            } else {
+                app.border_config.inactive_color
+            };
+
+            let top_buf = SolidColorBuffer::new((w + 2 * b, b), border_color);
+            elements.push(TrussRenderElement::Solid(
+                SolidColorRenderElement::from_buffer(
+                    &top_buf,
+                    (x - b, y - b),
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                ),
+            ));
+
+            let bottom_buf = SolidColorBuffer::new((w + 2 * b, b), border_color);
+            elements.push(TrussRenderElement::Solid(
+                SolidColorRenderElement::from_buffer(
+                    &bottom_buf,
+                    (x - b, y + h),
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                ),
+            ));
+
+            let left_buf = SolidColorBuffer::new((b, h), border_color);
+            elements.push(TrussRenderElement::Solid(
+                SolidColorRenderElement::from_buffer(
+                    &left_buf,
+                    (x - b, y),
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                ),
+            ));
+
+            let right_buf = SolidColorBuffer::new((b, h), border_color);
+            elements.push(TrussRenderElement::Solid(
+                SolidColorRenderElement::from_buffer(
+                    &right_buf,
+                    (x + w, y),
+                    1.0,
+                    1.0,
+                    Kind::Unspecified,
+                ),
+            ));
+        }
     }
 
     // 4. Layer Shell Surfaces: Bottom & Background layers

@@ -13,6 +13,9 @@
 truss.set("gap", 8)
 truss.set("ratio", 0.55)
 truss.set("bg_color", "#14141a")
+truss.set("border_width", 2)
+truss.set("active_border_color", "#80d5d2")
+truss.set("inactive_border_color", "#333333")
 
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings

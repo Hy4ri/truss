@@ -90,8 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     app.lua_config.apply_rules_to_manager(&mut app.window_rules);
     app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
     app.lua_config.apply_keybindings(&mut app.keybindings);
-    app.lua_config
-        .apply_settings(&mut app.dispatcher, &mut app.state, &mut app.bg_color);
+    app.lua_config.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+    );
 
     let dh = display.handle();
     let mut listener_dh = dh.clone();
