@@ -208,6 +208,21 @@ impl TtyBackend {
                         state.pointer_state.update_drag(&mut state.state);
                         state.needs_redraw = true;
 
+                        // Send configure to resized window if resizing
+                        if let PointerDragMode::Resize { window_id, .. } = state.pointer_state.drag {
+                            if let Some(surface) = state.surfaces.get(&window_id) {
+                                if let Some(win) = state.state.windows.get(&window_id) {
+                                    surface.with_pending_state(|s| {
+                                        s.size = Some(
+                                            (win.geometry.width as i32, win.geometry.height as i32)
+                                                .into(),
+                                        );
+                                    });
+                                    surface.send_configure();
+                                }
+                            }
+                        }
+
                         let pos = state.pointer_state.location;
                         let surface_under = state.surface_under(pos);
                         let serial = smithay::utils::SERIAL_COUNTER.next_serial();
@@ -294,7 +309,22 @@ impl TtyBackend {
                             }
                         }
                     } else {
+                        let dragged_window = match state.pointer_state.drag {
+                            PointerDragMode::Move { window_id, .. }
+                            | PointerDragMode::Resize { window_id, .. } => Some(window_id),
+                            PointerDragMode::None => None,
+                        };
                         state.pointer_state.end_drag();
+
+                        // If dragged window was tiled, snap it back to layout
+                        if let Some(win_id) = dragged_window {
+                            if let Some(win) = state.state.windows.get(&win_id) {
+                                if !win.floating {
+                                    state.refresh_layout_and_space();
+                                }
+                            }
+                        }
+
                         // Resize over: present whatever clients committed by
                         // now instead of freezing output for the fail-safe
                         // window waiting for stragglers.

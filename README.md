@@ -91,8 +91,8 @@ truss bar
 | `Super + Space` | `WindowSwapMaster` | Swap currently focused window with master |
 | `Super + 1..9` | `WorkspaceSwitch(id)` | Switch active workspace (1 through 9) |
 | `Super + Shift + 1..9` | `WindowMoveToWorkspace`| Move focused window to workspace (1 through 9) |
-| `Super + Left Drag` | `PointerDragMove` | Drag and move window (automatically floats) |
-| `Super + Right Drag` | `PointerDragResize` | Drag and resize window (automatically floats) |
+| `Super + Left Drag` | `PointerDragMove` | Drag and move window (floating windows reposition; tiled windows snap back on release) |
+| `Super + Right Drag` | `PointerDragResize` | Drag and resize window (floating windows resize; tiled windows snap back on release) |
 
 ---
 

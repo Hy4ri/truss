@@ -196,7 +196,8 @@ fn test_pointer_interactive_drag_and_resize() {
     let moved_geom = state.windows.get(&w1).unwrap().geometry;
     assert_eq!(moved_geom.x, 150);
     assert_eq!(moved_geom.y, 130);
-    assert!(state.windows.get(&w1).unwrap().floating);
+    // Tiled window does NOT automatically become floating
+    assert!(!state.windows.get(&w1).unwrap().floating);
 
     ptr.end_drag();
     assert_eq!(ptr.drag, PointerDragMode::None);
@@ -209,4 +210,64 @@ fn test_pointer_interactive_drag_and_resize() {
     let resized_geom = state.windows.get(&w1).unwrap().geometry;
     assert_eq!(resized_geom.width, 850);
     assert_eq!(resized_geom.height, 700);
+    assert!(!state.windows.get(&w1).unwrap().floating);
+
+    // Floating windows stay floating when dragged
+    state.windows.get_mut(&w1).unwrap().floating = true;
+    ptr.start_drag_move(w1, state.windows.get(&w1).unwrap().geometry);
+    ptr.set_location(Point::from((300.0, 300.0)));
+    ptr.update_drag(&mut state);
+    assert!(state.windows.get(&w1).unwrap().floating);
+}
+
+#[test]
+fn test_tiled_window_snaps_back_after_drag_release() {
+    let mut state = State::new();
+    let dispatcher = Dispatcher::new();
+    let mut ptr = PointerState::new();
+
+    let w1 = state.create_window(Some(1)).unwrap();
+    let w2 = state.create_window(Some(1)).unwrap();
+    let usable_area = Rect::new(0, 0, 1920, 1080);
+    dispatcher.recalculate_workspace_layout(&mut state, 1, usable_area);
+
+    let initial_w1_geom = state.windows.get(&w1).unwrap().geometry;
+    let initial_w2_geom = state.windows.get(&w2).unwrap().geometry;
+
+    // Drag move w1
+    ptr.set_location(Point::from((100.0, 100.0)));
+    ptr.start_drag_move(w1, initial_w1_geom);
+    ptr.set_location(Point::from((250.0, 300.0)));
+    ptr.update_drag(&mut state);
+
+    // Geometry moved during drag, but window did NOT float
+    let dragged_geom = state.windows.get(&w1).unwrap().geometry;
+    assert_ne!(dragged_geom, initial_w1_geom);
+    assert!(!state.windows.get(&w1).unwrap().floating);
+
+    // Release drag: since window is tiled, layout snaps it back
+    ptr.end_drag();
+    if !state.windows.get(&w1).unwrap().floating {
+        dispatcher.recalculate_workspace_layout(&mut state, 1, usable_area);
+    }
+    assert_eq!(state.windows.get(&w1).unwrap().geometry, initial_w1_geom);
+    assert_eq!(state.windows.get(&w2).unwrap().geometry, initial_w2_geom);
+
+    // Now toggle w1 to floating
+    state.toggle_floating(w1).unwrap();
+    assert!(state.windows.get(&w1).unwrap().floating);
+
+    // Drag move floating w1
+    ptr.start_drag_move(w1, initial_w1_geom);
+    ptr.set_location(Point::from((400.0, 500.0)));
+    ptr.update_drag(&mut state);
+
+    // Release drag: floating window retains its dragged geometry
+    ptr.end_drag();
+    if !state.windows.get(&w1).unwrap().floating {
+        dispatcher.recalculate_workspace_layout(&mut state, 1, usable_area);
+    }
+    let final_geom = state.windows.get(&w1).unwrap().geometry;
+    assert_ne!(final_geom, initial_w1_geom);
+    assert!(state.windows.get(&w1).unwrap().floating);
 }
