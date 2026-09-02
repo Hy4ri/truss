@@ -96,19 +96,37 @@ impl Dispatcher {
         workspace_id: u32,
         usable_area: Rect,
     ) {
+        self.recalculate_workspace_layout_with_full_area(
+            state,
+            workspace_id,
+            usable_area,
+            usable_area,
+        );
+    }
+
+    /// Recalculate geometries of all windows on a given workspace.
+    /// Tiled windows use `usable_area` (excluding bars/docks), while fullscreen windows
+    /// use `full_area` (covering the entire screen, including bars/docks).
+    pub fn recalculate_workspace_layout_with_full_area(
+        &self,
+        state: &mut State,
+        workspace_id: u32,
+        usable_area: Rect,
+        full_area: Rect,
+    ) {
         let (layout_name, window_ids) = match state.workspaces.get(&workspace_id) {
             Some(ws) => (ws.layout.clone(), ws.windows.clone()),
             None => return,
         };
 
-        // Filter out floating/fullscreen windows if needed, or arrange all tiled
+        // Filter out floating/fullscreen/maximized windows if needed, or arrange all tiled
         let tiled_windows: Vec<_> = window_ids
             .into_iter()
             .filter(|id| {
                 state
                     .windows
                     .get(id)
-                    .map(|w| !w.floating && !w.fullscreen)
+                    .map(|w| !w.floating && !w.fullscreen && !w.maximized)
                     .unwrap_or(false)
             })
             .collect();
@@ -122,12 +140,23 @@ impl Dispatcher {
             }
         }
 
-        // For fullscreen windows, assign the full usable display area
+        // For maximized windows, assign the usable display area (leaving room for the bar)
+        if let Some(ws) = state.workspaces.get(&workspace_id) {
+            for &win_id in &ws.windows {
+                if let Some(w) = state.windows.get_mut(&win_id) {
+                    if w.maximized && !w.fullscreen {
+                        w.geometry = usable_area;
+                    }
+                }
+            }
+        }
+
+        // For fullscreen windows, assign the full display area (covering the entire screen, even bars)
         if let Some(ws) = state.workspaces.get(&workspace_id) {
             for &win_id in &ws.windows {
                 if let Some(w) = state.windows.get_mut(&win_id) {
                     if w.fullscreen {
-                        w.geometry = usable_area;
+                        w.geometry = full_area;
                     }
                 }
             }
@@ -211,6 +240,7 @@ impl Dispatcher {
                     id: win_id,
                     floating: window.floating,
                     fullscreen: window.fullscreen,
+                    maximized: window.maximized,
                 });
                 Ok(DispatchResult::Ok)
             }
@@ -232,6 +262,29 @@ impl Dispatcher {
                     id: win_id,
                     floating: window.floating,
                     fullscreen: window.fullscreen,
+                    maximized: window.maximized,
+                });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowToggleMaximize { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                state.toggle_maximized(win_id)?;
+                let window = state
+                    .windows
+                    .get(&win_id)
+                    .expect("window was just validated");
+                self.broadcast(&Event::WindowStateChanged {
+                    id: win_id,
+                    floating: window.floating,
+                    fullscreen: window.fullscreen,
+                    maximized: window.maximized,
                 });
                 Ok(DispatchResult::Ok)
             }

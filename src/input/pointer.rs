@@ -63,18 +63,52 @@ impl PointerState {
     }
 
     /// Find which window contains the pointer position on the active workspace.
+    /// Order: Fullscreen > Floating (top-most first) > Tiled (top-most first)
     pub fn find_target_at_location(&self, state: &State) -> PointerFocusTarget {
         let ws = state.active_workspace();
         let px = self.location.x as i32;
         let py = self.location.y as i32;
 
-        // Iterate over workspace windows in reverse (top-most first)
-        for &win_id in ws.windows.iter().rev() {
+        let check_window = |win_id: WindowId| -> Option<PointerFocusTarget> {
             if let Some(win) = state.windows.get(&win_id) {
                 let r = &win.geometry;
                 if px >= r.x && px < r.x + r.width as i32 && py >= r.y && py < r.y + r.height as i32
                 {
-                    return PointerFocusTarget::Window(win_id);
+                    return Some(PointerFocusTarget::Window(win_id));
+                }
+            }
+            None
+        };
+
+        // 1. Fullscreen window has highest priority
+        for &win_id in ws.windows.iter().rev() {
+            if let Some(win) = state.windows.get(&win_id) {
+                if win.fullscreen {
+                    if let Some(target) = check_window(win_id) {
+                        return target;
+                    }
+                }
+            }
+        }
+
+        // 2. Floating windows have second priority (above tiled windows)
+        for &win_id in ws.windows.iter().rev() {
+            if let Some(win) = state.windows.get(&win_id) {
+                if win.floating && !win.fullscreen {
+                    if let Some(target) = check_window(win_id) {
+                        return target;
+                    }
+                }
+            }
+        }
+
+        // 3. Tiled windows
+        for &win_id in ws.windows.iter().rev() {
+            if let Some(win) = state.windows.get(&win_id) {
+                if !win.floating && !win.fullscreen {
+                    if let Some(target) = check_window(win_id) {
+                        return target;
+                    }
                 }
             }
         }

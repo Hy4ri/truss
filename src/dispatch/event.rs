@@ -26,6 +26,7 @@ pub enum Event {
         id: WindowId,
         floating: bool,
         fullscreen: bool,
+        maximized: bool,
     },
 
     #[serde(rename = "layout.changed")]

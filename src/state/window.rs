@@ -34,6 +34,7 @@ pub struct Window {
     pub geometry: Rect,
     pub floating: bool,
     pub fullscreen: bool,
+    pub maximized: bool,
 }
 
 impl Window {
@@ -46,6 +47,7 @@ impl Window {
             geometry: Rect::default(),
             floating: false,
             fullscreen: false,
+            maximized: false,
         }
     }
 }

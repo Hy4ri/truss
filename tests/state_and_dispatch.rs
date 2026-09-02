@@ -126,6 +126,7 @@ mod tests {
                 id: window,
                 floating: true,
                 fullscreen: false,
+                maximized: false,
             }
         );
     }

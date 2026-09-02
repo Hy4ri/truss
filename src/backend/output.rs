@@ -95,6 +95,16 @@ impl OutputManager {
         self.outputs.len() < prev_len
     }
 
+    /// Gets the primary output's full display geometry (including areas covered by panels/bars).
+    pub fn primary_full_area(&self) -> Rect {
+        if let Some(output) = self.outputs.first() {
+            if let Some(mode) = output.current_mode() {
+                return Rect::new(0, 0, mode.size.w as u32, mode.size.h as u32);
+            }
+        }
+        Rect::new(0, 0, 1920, 1080)
+    }
+
     /// Gets the primary output's usable geometry (excluding panels/bars with exclusive zones).
     pub fn primary_usable_area(&self) -> Rect {
         if let Some(output) = self.outputs.first() {

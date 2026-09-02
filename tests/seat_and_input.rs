@@ -175,6 +175,30 @@ fn test_pointer_find_window_target() {
         ptr.find_target_at_location(&state),
         PointerFocusTarget::Background
     );
+
+    // Stacking priority: floating window over tiled window
+    // Make w2 overlap w1's area
+    state.windows.get_mut(&w2).unwrap().geometry = Rect::new(0, 0, 960, 1080);
+    // Both tiled: reverse order picks w2 (last in ws.windows)
+    ptr.set_location(Point::from((200.0, 400.0)));
+    assert_eq!(
+        ptr.find_target_at_location(&state),
+        PointerFocusTarget::Window(w2)
+    );
+
+    // Make w1 floating: now w1 takes priority over tiled w2 even though w2 is later in list
+    state.windows.get_mut(&w1).unwrap().floating = true;
+    assert_eq!(
+        ptr.find_target_at_location(&state),
+        PointerFocusTarget::Window(w1)
+    );
+
+    // Make w2 fullscreen: now w2 takes absolute priority over floating w1
+    state.windows.get_mut(&w2).unwrap().fullscreen = true;
+    assert_eq!(
+        ptr.find_target_at_location(&state),
+        PointerFocusTarget::Window(w2)
+    );
 }
 
 #[test]

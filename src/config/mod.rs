@@ -228,6 +228,14 @@ impl LuaConfig {
         })?;
         cmd_table.set("toggle_fullscreen", toggle_fs)?;
 
+        let toggle_max = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowToggleMaximize {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("toggle_maximize", toggle_max)?;
+
         let cmd_spawn = self.lua.create_function(|lua, command: String| {
             let cmd = Command::Spawn { command };
             lua.to_value(&cmd)
