@@ -368,6 +368,7 @@ impl LuaConfig {
         dispatcher: &mut crate::dispatch::Dispatcher,
         state: &mut crate::state::State,
         bg_color: &mut smithay::backend::renderer::Color32F,
+        border_config: &mut crate::app::BorderConfig,
     ) {
         let Ok(settings) = self
             .lua
@@ -405,6 +406,34 @@ impl LuaConfig {
                     },
                     Err(e) => warn!("truss: invalid bg_color setting: {e}"),
                 },
+                "border_width" | "border.width" => match self.lua.from_value::<u32>(value) {
+                    Ok(w) => border_config.width = w,
+                    Err(e) => warn!("truss: invalid border_width setting: {e}"),
+                },
+                "active_border_color" | "border.active" | "border.active_color" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(s) => match parse_hex_color(&s) {
+                            Some([r, g, b, a]) => {
+                                border_config.active_color =
+                                    smithay::backend::renderer::Color32F::new(r, g, b, a);
+                            }
+                            None => warn!("truss: malformed active_border_color '{s}'"),
+                        },
+                        Err(e) => warn!("truss: invalid active_border_color setting: {e}"),
+                    }
+                }
+                "inactive_border_color" | "border.inactive" | "border.inactive_color" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(s) => match parse_hex_color(&s) {
+                            Some([r, g, b, a]) => {
+                                border_config.inactive_color =
+                                    smithay::backend::renderer::Color32F::new(r, g, b, a);
+                            }
+                            None => warn!("truss: malformed inactive_border_color '{s}'"),
+                        },
+                        Err(e) => warn!("truss: invalid inactive_border_color setting: {e}"),
+                    }
+                }
                 other => warn!("truss: unknown setting '{other}'"),
             }
         }

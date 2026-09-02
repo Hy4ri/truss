@@ -36,6 +36,24 @@ use crate::{
     sync::TransactionManager,
 };
 
+/// Configuration for window borders
+#[derive(Debug, Clone, PartialEq)]
+pub struct BorderConfig {
+    pub width: u32,
+    pub active_color: smithay::backend::renderer::Color32F,
+    pub inactive_color: smithay::backend::renderer::Color32F,
+}
+
+impl Default for BorderConfig {
+    fn default() -> Self {
+        Self {
+            width: 2,
+            active_color: smithay::backend::renderer::Color32F::new(0.502, 0.835, 0.824, 1.0), // #80d5d2
+            inactive_color: smithay::backend::renderer::Color32F::new(0.20, 0.20, 0.20, 1.0), // #333333
+        }
+    }
+}
+
 pub struct App {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
@@ -56,6 +74,7 @@ pub struct App {
     pub keybindings: Keybindings,
     pub window_rules: WindowRuleManager,
     pub bg_color: smithay::backend::renderer::Color32F,
+    pub border_config: BorderConfig,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
@@ -149,6 +168,7 @@ impl App {
             keybindings: Keybindings::new(),
             window_rules,
             bg_color: DESKTOP_BG_COLOR,
+            border_config: BorderConfig::default(),
             output_manager,
             render_manager,
             lua_config,
