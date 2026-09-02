@@ -72,9 +72,7 @@ impl DrmDisplay {
             .bind(&mut dmabuf)
             .map_err(|e| format!("GlesRenderer bind dmabuf failed: {e}"))?;
 
-        tracing::info!("LUNA-DRM: calling collect_render_elements, app.output_manager len={}, self.output: {}", app.output_manager.outputs.len(), self.output.name());
         let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
-        tracing::info!("LUNA-DRM: render_frame output {} elements count: {}", self.name, elements.len());
         let size = (self.size.0, self.size.1).into();
         let full_damage = [Rectangle::from_size(size)];
 
@@ -115,7 +113,6 @@ impl DrmDisplay {
             .map(|m| (m.size.w, m.size.h));
         let use_exact_damage = primary_size == Some(self.size);
 
-        tracing::info!("LUNA-DAMAGE: changed_damage is: {:?}", changed_damage);
         let Some(damage) = changed_damage else {
             // Nothing changed on screen — drop the acquired buffer without
             // queueing it (next_buffer may be called again and returns the
@@ -462,7 +459,6 @@ pub fn discover_and_init_drm_displays(
         // Register DRM page flip notifier in Calloop event loop
         let event_tx = vblank_tx.clone();
         let _ = loop_handle.insert_source(notifier, move |event, _, _state: &mut App| {
-            tracing::info!("LUNA-DRM-EVENT: received DrmEvent: {:?}", event);
             if let DrmEvent::VBlank(_crtc) = event {
                 // A queued GBM buffer may be released only after this event.
                 let _ = event_tx.send((card_id, _crtc));

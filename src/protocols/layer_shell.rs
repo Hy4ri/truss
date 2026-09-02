@@ -10,10 +10,14 @@ use tracing::{info, warn};
 use crate::App;
 
 impl WlrLayerShellHandler for App {
-    fn ack_configure(&mut self, surface: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface, configure: smithay::wayland::shell::wlr_layer::LayerSurfaceConfigure) {
-        tracing::info!("LUNA-ACK: layer surface ack_configure: {:?}", configure);
+    fn ack_configure(
+        &mut self,
+        _surface: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+        _configure: smithay::wayland::shell::wlr_layer::LayerSurfaceConfigure,
+    ) {
         self.needs_redraw = true;
     }
+
     fn shell_state(&mut self) -> &mut WlrLayerShellState {
         &mut self.layer_shell_state
     }
@@ -36,40 +40,38 @@ impl WlrLayerShellHandler for App {
             .or_else(|| self.output_manager.outputs.first())
             .cloned();
 
-        tracing::info!("LUNA-LAYER: target_output is {:?}, total outputs={}", target_output.as_ref().map(|o| o.name()), self.output_manager.outputs.len());
         if let Some(ref out) = target_output {
             let desktop_surface = DesktopLayerSurface::new(surface.clone(), namespace);
-            let mut layer_map = layer_map_for_output(out);
-            tracing::info!("LUNA-LAYER: out ptr: {:p}, userdata ptr: {:p}, name: {}", out, out.user_data(), out.name());
-            tracing::info!("LUNA-MAP-BEFORE: layers count: {}", layer_map.layers().count());
-            let map_res = layer_map.map_layer(&desktop_surface);
-            tracing::info!("LUNA-MAP-AFTER: res: {:?}, layers count: {}", map_res, layer_map.layers().count());
-            if let Err(e) = map_res {
-                warn!("Failed to map layer surface: {e}");
-            }
-            let _ = layer_map.arrange();
-
-            surface.with_pending_state(|state| {
-                if state.size.is_none() {
-                    // At map time the client hasn't committed a size yet, so
-                    // layer_geometry() is a zero-sized rect (e.g. 0x0). That is
-                    // `Some(..)`, so the fallback below would NOT trigger and we
-                    // would configure the client with width=0 height=0. Clients
-                    // like fuzzel reject a 0x0 configure, never commit, and stay
-                    // invisible. Treat both "no geometry" AND "zero geometry" as
-                    // "unknown" and hand the client the output's full size so it
-                    // gets a real, non-zero configure to ack against.
-                    let geo = layer_map.layer_geometry(&desktop_surface);
-                    let size = match geo {
-                        Some(g) if g.size.w > 0 && g.size.h > 0 => (g.size.w, g.size.h).into(),
-                        _ => out
-                            .current_mode()
-                            .map(|m| (m.size.w, m.size.h).into())
-                            .unwrap_or((1920, 1080).into()),
-                    };
-                    state.size = Some(size);
+            {
+                let mut layer_map = layer_map_for_output(out);
+                if let Err(e) = layer_map.map_layer(&desktop_surface) {
+                    warn!("Failed to map layer surface: {e}");
                 }
-            });
+                let _ = layer_map.arrange();
+
+                surface.with_pending_state(|state| {
+                    if state.size.is_none() {
+                        // At map time the client hasn't committed a size yet, so
+                        // layer_geometry() is a zero-sized rect (e.g. 0x0). That is
+                        // Some(0x0), so the fallback below would NOT trigger and we
+                        // would configure the client with width=0 height=0. Clients
+                        // like fuzzel reject a 0x0 configure, never commit, and stay
+                        // invisible. Treat both no geometry AND zero geometry as
+                        // unknown and hand the client the output's full size so it
+                        // gets a real, non-zero configure to ack against.
+                        let geo = layer_map.layer_geometry(&desktop_surface);
+                        let size = match geo {
+                            Some(g) if g.size.w > 0 && g.size.h > 0 => (g.size.w, g.size.h).into(),
+                            _ => out
+                                .current_mode()
+                                .map(|m| (m.size.w, m.size.h).into())
+                                .unwrap_or((1920, 1080).into()),
+                        };
+                        state.size = Some(size);
+                    }
+                });
+            } // Explicitly drop layer_map before refresh_layout_and_space to avoid mutex self-deadlock
+
             surface.send_configure();
 
             self.refresh_layout_and_space();
@@ -91,7 +93,7 @@ impl WlrLayerShellHandler for App {
             let _ = layer_map.arrange();
         }
         self.refresh_layout_and_space();
-            self.needs_redraw = true;
+        self.needs_redraw = true;
     }
 }
 

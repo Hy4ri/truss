@@ -1,4 +1,3 @@
-use smithay::utils::IsAlive;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
     render_elements_from_surface_tree, WaylandSurfaceRenderElement,
@@ -30,13 +29,6 @@ pub fn collect_render_elements(
     cursor_manager: &mut CursorManager,
 ) -> Vec<TrussRenderElement> {
     let mut elements = Vec::new();
-    for o in &app.output_manager.outputs {
-        let lm = layer_map_for_output(o);
-        for l in lm.layers() {
-            tracing::info!("LUNA-LM-FOUND: layer ns={}, geom={:?}, alive={}", l.namespace(), lm.layer_geometry(l), l.alive());
-        }
-        tracing::info!("LUNA-RENDER-ENTRY: o ptr: {:p}, userdata ptr: {:p}, name: {}, layers: {}", o, o.user_data(), o.name(), lm.layers().count());
-    }
 
     // 1. Cursor (top-most layer, rendered on top of everything)
     let pointer_loc = app.pointer_state.location;
@@ -70,7 +62,10 @@ pub fn collect_render_elements(
     for output in &app.output_manager.outputs {
         let layer_map = layer_map_for_output(output);
 
-        for surface in layer_map.layers() {
+        for surface in layer_map
+            .layers_on(WlrLayer::Overlay)
+            .chain(layer_map.layers_on(WlrLayer::Top))
+        {
             let geo = layer_map.layer_geometry(surface);
             let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
             let layer_elements = render_elements_from_surface_tree(
@@ -81,7 +76,6 @@ pub fn collect_render_elements(
                 1.0,
                 Kind::Unspecified,
             );
-            tracing::info!("LUNA-RENDER-LAYERS: found {} elements for layer surface {:?}", layer_elements.len(), surface.namespace());
             elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
         }
     }
@@ -91,7 +85,9 @@ pub fn collect_render_elements(
         let wl_surf = layer_surface.wl_surface();
         // Avoid duplicate rendering if already rendered via LayerMap
         let already_rendered = app.output_manager.outputs.iter().any(|o| {
-            layer_map_for_output(o).layers().any(|l| l.wl_surface() == wl_surf)
+            layer_map_for_output(o)
+                .layers()
+                .any(|l| l.wl_surface() == wl_surf)
         });
         if !already_rendered {
             let layer_elements = render_elements_from_surface_tree(
@@ -150,22 +146,21 @@ pub fn collect_render_elements(
     for output in &app.output_manager.outputs {
         let layer_map = layer_map_for_output(output);
 
-        for surface in std::iter::empty::<&smithay::desktop::LayerSurface>()
+        for surface in layer_map
+            .layers_on(WlrLayer::Bottom)
+            .chain(layer_map.layers_on(WlrLayer::Background))
         {
-            if let Some(loc) = layer_map
-                .layer_geometry(surface)
-                .map(|g| (g.loc.x, g.loc.y))
-            {
-                let layer_elements = render_elements_from_surface_tree(
-                    renderer,
-                    surface.wl_surface(),
-                    loc,
-                    1.0,
-                    1.0,
-                    Kind::Unspecified,
-                );
-                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-            }
+            let geo = layer_map.layer_geometry(surface);
+            let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                surface.wl_surface(),
+                loc,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
         }
     }
 
