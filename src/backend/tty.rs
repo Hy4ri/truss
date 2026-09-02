@@ -259,7 +259,27 @@ impl TtyBackend {
                                 pointer.frame(state);
                             }
                         } else {
-                            state.set_focused_window(None);
+                            let surface_under = state.surface_under(state.pointer_state.location);
+                            let layer_wants_kb = surface_under.as_ref().map(|(s, _)| {
+                                smithay::wayland::compositor::with_states(s, |states| {
+                                    let mut cached = states.cached_state.get::<smithay::wayland::shell::wlr_layer::LayerSurfaceCachedState>();
+                                    match cached.current().keyboard_interactivity {
+                                        smithay::wayland::shell::wlr_layer::KeyboardInteractivity::Exclusive
+                                        | smithay::wayland::shell::wlr_layer::KeyboardInteractivity::OnDemand => true,
+                                        smithay::wayland::shell::wlr_layer::KeyboardInteractivity::None => false,
+                                    }
+                                })
+                            }).unwrap_or(false);
+
+                            if layer_wants_kb {
+                                if let Some((s, _)) = surface_under {
+                                    if let Some(keyboard) = state.seat.get_keyboard() {
+                                        keyboard.set_focus(state, Some(s), serial);
+                                    }
+                                }
+                            } else {
+                                state.set_focused_window(None);
+                            }
                             if let Some(pointer) = state.seat.get_pointer() {
                                 pointer.button(
                                     state,

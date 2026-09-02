@@ -95,6 +95,30 @@ impl CompositorHandler for App {
                 }
                 lm.arrange();
             }
+
+            // Grant keyboard focus to layer surfaces that request keyboard interactivity (e.g. launchers)
+            use smithay::wayland::compositor::with_states;
+            use smithay::wayland::shell::wlr_layer::{
+                KeyboardInteractivity, LayerSurfaceCachedState,
+            };
+
+            let wants_keyboard = with_states(surface, |states| {
+                let mut cached = states.cached_state.get::<LayerSurfaceCachedState>();
+                match cached.current().keyboard_interactivity {
+                    KeyboardInteractivity::Exclusive | KeyboardInteractivity::OnDemand => true,
+                    KeyboardInteractivity::None => match cached.pending().keyboard_interactivity {
+                        KeyboardInteractivity::Exclusive | KeyboardInteractivity::OnDemand => true,
+                        KeyboardInteractivity::None => false,
+                    },
+                }
+            });
+
+            if wants_keyboard {
+                if let Some(keyboard) = self.seat.get_keyboard() {
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    keyboard.set_focus(self, Some(surface.clone()), serial);
+                }
+            }
         }
     }
 }

@@ -12,10 +12,31 @@ use crate::App;
 impl WlrLayerShellHandler for App {
     fn ack_configure(
         &mut self,
-        _surface: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
+        surface: smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
         _configure: smithay::wayland::shell::wlr_layer::LayerSurfaceConfigure,
     ) {
         self.needs_redraw = true;
+
+        use smithay::wayland::compositor::with_states;
+        use smithay::wayland::shell::wlr_layer::{KeyboardInteractivity, LayerSurfaceCachedState};
+
+        let wants_keyboard = with_states(&surface, |states| {
+            let mut cached = states.cached_state.get::<LayerSurfaceCachedState>();
+            match cached.current().keyboard_interactivity {
+                KeyboardInteractivity::Exclusive | KeyboardInteractivity::OnDemand => true,
+                KeyboardInteractivity::None => match cached.pending().keyboard_interactivity {
+                    KeyboardInteractivity::Exclusive | KeyboardInteractivity::OnDemand => true,
+                    KeyboardInteractivity::None => false,
+                },
+            }
+        });
+
+        if wants_keyboard {
+            if let Some(keyboard) = self.seat.get_keyboard() {
+                let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                keyboard.set_focus(self, Some(surface), serial);
+            }
+        }
     }
 
     fn shell_state(&mut self) -> &mut WlrLayerShellState {
@@ -94,6 +115,10 @@ impl WlrLayerShellHandler for App {
         }
         self.refresh_layout_and_space();
         self.needs_redraw = true;
+
+        // Restore keyboard focus to the active workspace's focused window
+        let focused_id = self.state.active_workspace().focused_window;
+        self.set_focused_window(focused_id);
     }
 }
 
