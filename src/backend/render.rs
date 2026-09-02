@@ -66,20 +66,39 @@ pub fn collect_render_elements(
             .layers_on(WlrLayer::Overlay)
             .chain(layer_map.layers_on(WlrLayer::Top))
         {
-            if let Some(loc) = layer_map
-                .layer_geometry(surface)
-                .map(|g| (g.loc.x, g.loc.y))
-            {
-                let layer_elements = render_elements_from_surface_tree(
-                    renderer,
-                    surface.wl_surface(),
-                    loc,
-                    1.0,
-                    1.0,
-                    Kind::Unspecified,
-                );
-                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-            }
+            let geo = layer_map.layer_geometry(surface);
+            let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                surface.wl_surface(),
+                loc,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
+        }
+    }
+
+    // Direct fallback: render all active layer surfaces registered in layer_shell_state
+    for layer_surface in app.layer_shell_state.layer_surfaces() {
+        let wl_surf = layer_surface.wl_surface();
+        // Avoid duplicate rendering if already rendered via LayerMap
+        let already_rendered = app.output_manager.outputs.iter().any(|o| {
+            layer_map_for_output(o)
+                .layers()
+                .any(|l| l.wl_surface() == wl_surf)
+        });
+        if !already_rendered {
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                wl_surf,
+                (0, 0),
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
         }
     }
 
@@ -131,20 +150,17 @@ pub fn collect_render_elements(
             .layers_on(WlrLayer::Bottom)
             .chain(layer_map.layers_on(WlrLayer::Background))
         {
-            if let Some(loc) = layer_map
-                .layer_geometry(surface)
-                .map(|g| (g.loc.x, g.loc.y))
-            {
-                let layer_elements = render_elements_from_surface_tree(
-                    renderer,
-                    surface.wl_surface(),
-                    loc,
-                    1.0,
-                    1.0,
-                    Kind::Unspecified,
-                );
-                elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
-            }
+            let geo = layer_map.layer_geometry(surface);
+            let loc = geo.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0));
+            let layer_elements = render_elements_from_surface_tree(
+                renderer,
+                surface.wl_surface(),
+                loc,
+                1.0,
+                1.0,
+                Kind::Unspecified,
+            );
+            elements.extend(layer_elements.into_iter().map(TrussRenderElement::Surface));
         }
     }
 
