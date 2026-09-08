@@ -40,6 +40,8 @@ pub struct Window {
     pub saved_geometry: Option<Rect>,
     pub initial_size: Option<String>,
     pub initial_position: Option<String>,
+    /// Opacity stored as integer percent (0 to 100) to keep Eq/Hash implementations happy
+    pub opacity: Option<u8>,
 }
 
 impl Window {
@@ -58,6 +60,7 @@ impl Window {
             saved_geometry: None,
             initial_size: None,
             initial_position: None,
+            opacity: None,
         }
     }
 }

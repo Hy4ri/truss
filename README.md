@@ -133,6 +133,8 @@ truss.set("bg_color", "#14141a") -- background color, hex: #rgb or #rrggbb
 truss.set("border_width", 2)     -- window border thickness (pixels)
 truss.set("smart_borders", false) -- eliminate borders when only 1 tiled window is present
 truss.set("smart_gaps", false)   -- eliminate gaps when only 1 tiled window is present
+truss.set("active_opacity", 1.0) -- global opacity for active/focused window (0.0 - 1.0)
+truss.set("inactive_opacity", 1.0) -- global opacity for inactive windows (0.0 - 1.0)
 truss.set("active_border_color", "#80d5d2")   -- active window border color
 truss.set("inactive_border_color", "#333333") -- inactive window border color
 truss.set("focus_mode", "click") -- "click" (default) or "follow_mouse" / "sloppy"
@@ -152,6 +154,12 @@ truss.window_rule({
     match = { class = "(pavucontrol|qalculate-gtk)" },
     float = true,
     center = true,
+})
+
+-- Per-window opacity rules:
+truss.window_rule({
+    match = { class = "(Spotify)" },
+    opacity = 0.85,
 })
 
 -- PIP / Sticky dialog with size and position rules:

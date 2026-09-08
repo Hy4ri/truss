@@ -71,6 +71,15 @@ pub fn collect_render_elements(
             return;
         };
 
+        let is_active = Some(window_id) == app.state.active_workspace().focused_window;
+        let window_alpha = if let Some(custom_op) = window.opacity {
+            custom_op as f32 / 100.0
+        } else if is_active {
+            app.opacity_config.active_opacity
+        } else {
+            app.opacity_config.inactive_opacity
+        };
+
         let win_geom = (window.geometry.x, window.geometry.y);
 
         // Render associated popups first (above parent window)
@@ -83,7 +92,7 @@ pub fn collect_render_elements(
                 popup.wl_surface(),
                 popup_abs_pos,
                 1.0,
-                1.0,
+                window_alpha,
                 Kind::Unspecified,
             );
             elements.extend(popup_elements.into_iter().map(TrussRenderElement::Surface));
@@ -94,7 +103,7 @@ pub fn collect_render_elements(
             surface.wl_surface(),
             win_geom,
             1.0,
-            1.0,
+            window_alpha,
             Kind::Unspecified,
         );
         elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));

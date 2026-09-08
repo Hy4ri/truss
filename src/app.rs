@@ -36,6 +36,21 @@ use crate::{
     sync::TransactionManager,
 };
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct OpacityConfig {
+    pub active_opacity: f32,
+    pub inactive_opacity: f32,
+}
+
+impl Default for OpacityConfig {
+    fn default() -> Self {
+        Self {
+            active_opacity: 1.0,
+            inactive_opacity: 1.0,
+        }
+    }
+}
+
 /// Configuration for window borders
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FocusMode {
@@ -111,6 +126,7 @@ pub struct App {
     pub window_rules: WindowRuleManager,
     pub bg_color: smithay::backend::renderer::Color32F,
     pub border_config: BorderConfig,
+    pub opacity_config: OpacityConfig,
     pub focus_mode: FocusMode,
     pub keyboard_config: KeyboardConfig,
     pub config_path: Option<std::path::PathBuf>,
@@ -230,6 +246,7 @@ impl App {
             window_rules,
             bg_color: DESKTOP_BG_COLOR,
             border_config: BorderConfig::default(),
+            opacity_config: OpacityConfig::default(),
             focus_mode: FocusMode::default(),
             keyboard_config: KeyboardConfig::default(),
             config_path: None,
@@ -478,6 +495,7 @@ impl App {
             &mut self.state,
             &mut self.bg_color,
             &mut self.border_config,
+            &mut self.opacity_config,
             &mut self.focus_mode,
             &mut self.keyboard_config,
             &mut self.auto_reload,

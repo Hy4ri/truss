@@ -145,6 +145,7 @@ fn test_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -177,6 +178,7 @@ fn test_border_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -205,6 +207,7 @@ fn test_invalid_setting_warns() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -307,6 +310,7 @@ fn test_parse_hex_color_unicode_safe() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -370,6 +374,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -386,6 +391,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -402,6 +408,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -425,6 +432,7 @@ fn test_auto_reload_setting_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -440,6 +448,7 @@ fn test_auto_reload_setting_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -470,6 +479,7 @@ fn test_keyboard_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,
@@ -624,6 +634,7 @@ fn test_smart_borders_and_gaps_settings() {
     let mut dispatcher = truss::Dispatcher::new();
     let mut bg_color = smithay::backend::renderer::Color32F::new(0.0, 0.0, 0.0, 1.0);
     let mut border_config = truss::BorderConfig::default();
+    let mut opacity_config = truss::OpacityConfig::default();
     let mut focus_mode = truss::FocusMode::default();
     let mut keyboard_config = truss::KeyboardConfig::default();
     let mut auto_reload = false;
@@ -633,6 +644,7 @@ fn test_smart_borders_and_gaps_settings() {
         &mut state,
         &mut bg_color,
         &mut border_config,
+        &mut opacity_config,
         &mut focus_mode,
         &mut keyboard_config,
         &mut auto_reload,

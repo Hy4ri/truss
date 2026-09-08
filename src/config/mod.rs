@@ -415,6 +415,17 @@ impl LuaConfig {
                     if let Ok(move_str) = rule_table.get::<String>("move") {
                         action.initial_position = Some(move_str);
                     }
+                    if let Ok(mlua::Value::Number(op)) = rule_table.get::<mlua::Value>("opacity") {
+                        action.opacity = Some(((op.clamp(0.0, 1.0)) * 100.0).round() as u8);
+                    }
+                    if let Ok(mlua::Value::Integer(op)) = rule_table.get::<mlua::Value>("opacity") {
+                        let pct = if op <= 1 {
+                            (op * 100) as u8
+                        } else {
+                            (op.clamp(0, 100)) as u8
+                        };
+                        action.opacity = Some(pct);
+                    }
 
                     manager.add_rule(WindowRule::new(name, matcher, action));
                 }
@@ -503,6 +514,7 @@ impl LuaConfig {
         state: &mut crate::state::State,
         bg_color: &mut smithay::backend::renderer::Color32F,
         border_config: &mut crate::app::BorderConfig,
+        opacity_config: &mut crate::app::OpacityConfig,
         focus_mode: &mut crate::app::FocusMode,
         keyboard_config: &mut crate::app::KeyboardConfig,
         auto_reload: &mut bool,
@@ -551,6 +563,18 @@ impl LuaConfig {
                     Ok(b) => border_config.smart_borders = b,
                     Err(e) => warn!("truss: invalid smart_borders setting: {e}"),
                 },
+                "active_opacity" | "opacity.active" => {
+                    match self.lua.from_value::<f32>(value) {
+                        Ok(o) => opacity_config.active_opacity = o.clamp(0.0, 1.0),
+                        Err(e) => warn!("truss: invalid active_opacity setting: {e}"),
+                    }
+                }
+                "inactive_opacity" | "opacity.inactive" => {
+                    match self.lua.from_value::<f32>(value) {
+                        Ok(o) => opacity_config.inactive_opacity = o.clamp(0.0, 1.0),
+                        Err(e) => warn!("truss: invalid inactive_opacity setting: {e}"),
+                    }
+                }
                 "smart_gaps" | "gaps.smart" | "no_gaps_when_only" => {
                     match self.lua.from_value::<bool>(value) {
                         Ok(b) => dispatcher.layout_config.smart_gaps = b,
