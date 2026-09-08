@@ -73,6 +73,8 @@ pub struct WindowRuleAction {
     pub initial_size: Option<String>,
     /// Initial move/position (pixels or percentage like "100 100" or "72% 7%")
     pub initial_position: Option<String>,
+    /// Custom opacity stored as percent 0..=100
+    pub opacity: Option<u8>,
 }
 
 /// A complete window rule with a matcher and corresponding actions.
@@ -119,6 +121,9 @@ impl WindowRule {
             }
             if self.action.initial_position.is_some() {
                 window.initial_position = self.action.initial_position.clone();
+            }
+            if let Some(op) = self.action.opacity {
+                window.opacity = Some(op);
             }
             true
         } else {

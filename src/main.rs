@@ -96,6 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.opacity_config,
         &mut app.focus_mode,
         &mut app.keyboard_config,
         &mut app.auto_reload,

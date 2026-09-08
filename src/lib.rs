@@ -12,7 +12,7 @@ pub mod protocols;
 pub mod state;
 pub mod sync;
 
-pub use app::{App, BorderConfig, FocusMode, KeyboardConfig};
+pub use app::{App, BorderConfig, FocusMode, KeyboardConfig, OpacityConfig};
 pub use backend::{
     collect_render_elements, CursorManager, OutputInfo, OutputManager, RenderManager,
     TrussRenderElement, TtyBackend, DESKTOP_BG_COLOR,
