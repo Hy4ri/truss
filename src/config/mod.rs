@@ -377,6 +377,7 @@ impl LuaConfig {
         state: &mut crate::state::State,
         bg_color: &mut smithay::backend::renderer::Color32F,
         border_config: &mut crate::app::BorderConfig,
+        focus_mode: &mut crate::app::FocusMode,
     ) {
         let Ok(settings) = self
             .lua
@@ -440,6 +441,25 @@ impl LuaConfig {
                             None => warn!("truss: malformed inactive_border_color '{s}'"),
                         },
                         Err(e) => warn!("truss: invalid inactive_border_color setting: {e}"),
+                    }
+                }
+                "focus_mode" => match self.lua.from_value::<String>(value) {
+                    Ok(s) => match s.trim().to_lowercase().as_str() {
+                        "click" => *focus_mode = crate::app::FocusMode::Click,
+                        "follow_mouse" | "follow-mouse" | "sloppy" => {
+                            *focus_mode = crate::app::FocusMode::FollowMouse;
+                        }
+                        other => warn!(
+                            "truss: unknown focus_mode '{other}', expected 'click' or 'follow_mouse'"
+                        ),
+                    },
+                    Err(e) => warn!("truss: invalid focus_mode setting: {e}"),
+                },
+                "focus_follow_mouse" | "focus_follows_mouse" => {
+                    match self.lua.from_value::<bool>(value) {
+                        Ok(true) => *focus_mode = crate::app::FocusMode::FollowMouse,
+                        Ok(false) => *focus_mode = crate::app::FocusMode::Click,
+                        Err(e) => warn!("truss: invalid focus_follow_mouse setting: {e}"),
                     }
                 }
                 other => warn!("truss: unknown setting '{other}'"),

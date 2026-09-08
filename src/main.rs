@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.focus_mode,
     );
 
     let dh = display.handle();
@@ -247,6 +248,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     state.pointer_state.set_location(pos);
                     state.pointer_state.update_drag(&mut state.state);
+                    state.update_focus_on_pointer_motion();
 
                     // Send configure to resized window if resizing
                     if let PointerDragMode::Resize { window_id, .. } = state.pointer_state.drag {

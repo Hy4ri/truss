@@ -130,6 +130,10 @@ Alternatively, `truss init-config` writes the default configuration to the user 
 truss.set("gap", 8)              -- gap between windows (pixels)
 truss.set("ratio", 0.55)         -- master area ratio (0.0 - 1.0)
 truss.set("bg_color", "#14141a") -- background color, hex: #rgb or #rrggbb
+truss.set("border_width", 2)     -- window border thickness (pixels)
+truss.set("active_border_color", "#80d5d2")   -- active window border color
+truss.set("inactive_border_color", "#333333") -- inactive window border color
+truss.set("focus_mode", "click") -- "click" (default) or "follow_mouse" / "sloppy"
 ```
 
 ### Keybindings

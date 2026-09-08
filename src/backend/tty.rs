@@ -156,6 +156,7 @@ impl TtyBackend {
                     let bounds = state.output_manager.primary_usable_area();
                     state.pointer_state.update_location(delta, bounds);
                     state.pointer_state.update_drag(&mut state.state);
+                    state.update_focus_on_pointer_motion();
                     state.needs_redraw = true;
 
                     // Send configure to resized window if resizing
@@ -206,6 +207,7 @@ impl TtyBackend {
                     {
                         state.pointer_state.location = pos_logical;
                         state.pointer_state.update_drag(&mut state.state);
+                        state.update_focus_on_pointer_motion();
                         state.needs_redraw = true;
 
                         // Send configure to resized window if resizing
