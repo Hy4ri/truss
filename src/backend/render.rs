@@ -186,6 +186,21 @@ pub fn collect_render_elements(
         }
     }
 
+    // If special / scratchpad workspace is toggled, also overlay its windows on top
+    if app.state.special_workspace_active {
+        if let Some(special_ws) = app
+            .state
+            .workspaces
+            .get(&crate::state::SPECIAL_WORKSPACE_ID)
+        {
+            for &wid in &special_ws.windows {
+                if !visible_window_ids.contains(&wid) {
+                    visible_window_ids.push(wid);
+                }
+            }
+        }
+    }
+
     // 2. Fullscreen Windows (TOP-MOST: max on top, even covers Overlay & Top layers/bar)
     for &window_id in visible_window_ids.iter().rev() {
         if let Some(win) = app.state.windows.get(&window_id) {

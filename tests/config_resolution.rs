@@ -695,6 +695,28 @@ fn test_move_to_workspace_silent_binding() {
 }
 
 #[test]
+fn test_special_scratchpad_workspace() {
+    let mut state = truss::state::State::new();
+    let w1 = state.create_window(None).unwrap();
+    assert_eq!(state.windows.get(&w1).unwrap().workspace_id, 1);
+
+    assert!(!state.special_workspace_active);
+    assert!(state.toggle_special_workspace());
+    assert!(state.special_workspace_active);
+
+    state
+        .move_window_to_workspace(w1, truss::state::SPECIAL_WORKSPACE_ID)
+        .unwrap();
+    assert_eq!(
+        state.windows.get(&w1).unwrap().workspace_id,
+        truss::state::SPECIAL_WORKSPACE_ID
+    );
+
+    assert!(!state.toggle_special_workspace());
+    assert!(!state.special_workspace_active);
+}
+
+#[test]
 fn test_force_kill_window_binding() {
     let cfg = LuaConfig::new().unwrap();
     cfg.load_string(

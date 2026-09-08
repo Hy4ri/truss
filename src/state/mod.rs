@@ -20,6 +20,8 @@ pub enum StateError {
     InvalidOperation(String),
 }
 
+pub const SPECIAL_WORKSPACE_ID: u32 = 999;
+
 /// Single source of truth for the compositor state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct State {
@@ -27,6 +29,7 @@ pub struct State {
     pub windows: BTreeMap<WindowId, Window>,
     pub active_workspace_id: u32,
     pub previous_workspace_id: Option<u32>,
+    pub special_workspace_active: bool,
     pub focus_history: Vec<WindowId>,
     next_window_id: u64,
 }
@@ -37,12 +40,17 @@ impl Default for State {
         for i in 1..=9 {
             workspaces.insert(i, Workspace::new(i, format!("{i}"), "master"));
         }
+        workspaces.insert(
+            SPECIAL_WORKSPACE_ID,
+            Workspace::new(SPECIAL_WORKSPACE_ID, "special", "master"),
+        );
 
         Self {
             workspaces,
             windows: BTreeMap::new(),
             active_workspace_id: 1,
             previous_workspace_id: None,
+            special_workspace_active: false,
             focus_history: Vec::new(),
             next_window_id: 1,
         }
@@ -77,9 +85,14 @@ impl State {
         Ok(())
     }
 
-    /// Calculate next workspace ID in cycling order.
+    /// Calculate next workspace ID in cycling order (ignoring special workspaces).
     pub fn next_workspace_id(&self) -> Option<u32> {
-        let keys: Vec<u32> = self.workspaces.keys().copied().collect();
+        let keys: Vec<u32> = self
+            .workspaces
+            .keys()
+            .copied()
+            .filter(|&id| id != SPECIAL_WORKSPACE_ID)
+            .collect();
         if keys.is_empty() {
             return None;
         }
@@ -91,9 +104,14 @@ impl State {
         Some(keys[next_idx])
     }
 
-    /// Calculate previous workspace ID in cycling order.
+    /// Calculate previous workspace ID in cycling order (ignoring special workspaces).
     pub fn prev_workspace_id(&self) -> Option<u32> {
-        let keys: Vec<u32> = self.workspaces.keys().copied().collect();
+        let keys: Vec<u32> = self
+            .workspaces
+            .keys()
+            .copied()
+            .filter(|&id| id != SPECIAL_WORKSPACE_ID)
+            .collect();
         if keys.is_empty() {
             return None;
         }
@@ -103,6 +121,12 @@ impl State {
             .unwrap_or(0);
         let prev_idx = (idx + keys.len() - 1) % keys.len();
         Some(keys[prev_idx])
+    }
+
+    /// Toggle visibility of the overlay special / scratchpad workspace.
+    pub fn toggle_special_workspace(&mut self) -> bool {
+        self.special_workspace_active = !self.special_workspace_active;
+        self.special_workspace_active
     }
 
     /// Record a window focus event in MRU order.

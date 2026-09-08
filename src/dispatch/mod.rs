@@ -228,6 +228,34 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
+            Command::WorkspaceToggleSpecial => {
+                let active = state.toggle_special_workspace();
+                self.broadcast(&Event::WorkspaceSwitched {
+                    id: if active {
+                        crate::state::SPECIAL_WORKSPACE_ID
+                    } else {
+                        state.active_workspace_id
+                    },
+                });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowMoveToSpecial { window_id } => {
+                let win_id = match window_id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                state.move_window_to_workspace(win_id, crate::state::SPECIAL_WORKSPACE_ID)?;
+                self.broadcast(&Event::WindowMovedWorkspace {
+                    id: win_id,
+                    workspace_id: crate::state::SPECIAL_WORKSPACE_ID,
+                });
+                Ok(DispatchResult::Ok)
+            }
+
             Command::WindowFocus { id } => {
                 state.focus_window(id)?;
                 self.broadcast(&Event::WindowFocused { id });

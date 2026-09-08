@@ -10,7 +10,14 @@ mod tests {
     fn test_state_workspace_creation_and_switch() {
         let mut state = State::new();
         assert_eq!(state.active_workspace_id, 1);
-        assert_eq!(state.workspaces.len(), 9);
+        assert_eq!(
+            state
+                .workspaces
+                .keys()
+                .filter(|&&k| k != truss::state::SPECIAL_WORKSPACE_ID)
+                .count(),
+            9
+        );
 
         state.switch_workspace(3).unwrap();
         assert_eq!(state.active_workspace_id, 3);
