@@ -267,6 +267,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         data.zoom_factor = (data.zoom_factor + delta).clamp(1.0, 5.0);
                                     } else if let truss::input::KeyAction::Dispatch(truss::dispatch::Command::ZoomReset) = &action {
                                         data.zoom_factor = 1.0;
+                                    } else if let truss::input::KeyAction::Dispatch(truss::dispatch::Command::DpmsToggle) = &action {
+                                        data.toggle_dpms();
                                     }
 
                                     let _ = data.keybindings.execute_action(

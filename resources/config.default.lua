@@ -56,6 +56,7 @@ truss.keybind("SUPER+SHIFT", "s", truss.cmd.move_to_special_workspace())
 truss.keybind("SUPER", "equal", truss.cmd.zoom_change(0.1))
 truss.keybind("SUPER", "minus", truss.cmd.zoom_change(-0.1))
 truss.keybind("SUPER", "0", truss.cmd.zoom_reset())
+truss.keybind("SUPER+SHIFT", "p", truss.cmd.dpms_toggle())
 for ws = 1, 9 do
     truss.keybind("SUPER", tostring(ws), truss.cmd.workspace_switch(ws))
     truss.keybind("SUPER+SHIFT", tostring(ws), truss.cmd.move_to_workspace(ws))

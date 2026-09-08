@@ -42,6 +42,7 @@ pub struct Window {
     pub initial_position: Option<String>,
     /// Opacity stored as integer percent (0 to 100) to keep Eq/Hash implementations happy
     pub opacity: Option<u8>,
+    pub idle_inhibit: Option<String>,
 }
 
 impl Window {
@@ -61,6 +62,7 @@ impl Window {
             initial_size: None,
             initial_position: None,
             opacity: None,
+            idle_inhibit: None,
         }
     }
 }

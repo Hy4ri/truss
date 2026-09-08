@@ -235,6 +235,12 @@ impl LuaConfig {
         })?;
         cmd_table.set("zoom_reset", zoom_reset)?;
 
+        let dpms_toggle = self.lua.create_function(|lua, ()| {
+            let cmd = Command::DpmsToggle;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("dpms_toggle", dpms_toggle)?;
+
         let focus_last_win = self.lua.create_function(|lua, ()| {
             let cmd = Command::WindowFocusLast;
             lua.to_value(&cmd)
@@ -437,6 +443,17 @@ impl LuaConfig {
                             (op.clamp(0, 100)) as u8
                         };
                         action.opacity = Some(pct);
+                    }
+                    if let Ok(inhibit_str) = rule_table.get::<String>("idle_inhibit") {
+                        action.idle_inhibit = Some(inhibit_str);
+                    } else if let Ok(mlua::Value::Boolean(inhibit_b)) =
+                        rule_table.get::<mlua::Value>("idle_inhibit")
+                    {
+                        action.idle_inhibit = Some(if inhibit_b {
+                            "always".into()
+                        } else {
+                            "none".into()
+                        });
                     }
 
                     manager.add_rule(WindowRule::new(name, matcher, action));

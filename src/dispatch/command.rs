@@ -30,6 +30,9 @@ pub enum Command {
     #[serde(rename = "render.zoom_reset")]
     ZoomReset,
 
+    #[serde(rename = "output.dpms_toggle")]
+    DpmsToggle,
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 

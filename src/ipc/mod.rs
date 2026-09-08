@@ -117,6 +117,8 @@ impl IpcServer {
                                                                     app.zoom_factor = (app.zoom_factor + delta).clamp(1.0, 5.0);
                                                                 } else if let crate::dispatch::Command::ZoomReset = &req.command {
                                                                     app.zoom_factor = 1.0;
+                                                                } else if let crate::dispatch::Command::DpmsToggle = &req.command {
+                                                                    app.toggle_dpms();
                                                                 }
 
                                                                 match app.dispatcher.dispatch(

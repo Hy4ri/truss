@@ -9,6 +9,7 @@ use smithay::{
     wayland::{
         compositor::CompositorState,
         fractional_scale::FractionalScaleManagerState,
+        idle_inhibit::IdleInhibitManagerState,
         output::OutputManagerState,
         selection::data_device::DataDeviceState,
         shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
@@ -17,7 +18,7 @@ use smithay::{
     },
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{channel, Receiver, Sender},
@@ -113,6 +114,10 @@ pub struct App {
     pub data_device_state: DataDeviceState,
     pub output_manager_state: OutputManagerState,
     pub fractional_scale_manager_state: FractionalScaleManagerState,
+    pub idle_inhibit_manager_state: IdleInhibitManagerState,
+    pub inhibited_surfaces:
+        HashSet<smithay::reexports::wayland_server::protocol::wl_surface::WlSurface>,
+    pub dpms_enabled: bool,
     pub viewporter_state: ViewporterState,
     pub xdg_decoration_state: smithay::wayland::shell::xdg::decoration::XdgDecorationState,
     pub seat_state: SeatState<Self>,
@@ -187,6 +192,7 @@ impl App {
         let data_device_state = DataDeviceState::new::<Self>(&dh);
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&dh);
         let fractional_scale_manager_state = FractionalScaleManagerState::new::<Self>(&dh);
+        let idle_inhibit_manager_state = IdleInhibitManagerState::new::<Self>(&dh);
         let viewporter_state = ViewporterState::new::<Self>(&dh);
         let xdg_decoration_state =
             smithay::wayland::shell::xdg::decoration::XdgDecorationState::new::<Self>(&dh);
@@ -234,6 +240,9 @@ impl App {
             data_device_state,
             output_manager_state,
             fractional_scale_manager_state,
+            idle_inhibit_manager_state,
+            inhibited_surfaces: HashSet::new(),
+            dpms_enabled: true,
             viewporter_state,
             xdg_decoration_state,
             seat_state,
@@ -342,7 +351,36 @@ impl App {
 
     /// Apply matching rules and keep the state workspace indexes in sync.
     ///
-    /// Rules operate on a `Window`, while `State` also stores a per-workspace
+    /// Check if idle is currently inhibited either via Wayland zwp_idle_inhibit
+    /// protocol or through a matching window rule on an active/fullscreen window.
+    pub fn is_idle_inhibited(&self) -> bool {
+        if !self.inhibited_surfaces.is_empty() {
+            return true;
+        }
+
+        let active_ws = self.state.active_workspace_id;
+        for win in self.state.windows.values() {
+            if win.workspace_id != active_ws && !win.pinned {
+                continue;
+            }
+            if let Some(ref mode) = win.idle_inhibit {
+                match mode.as_str() {
+                    "always" => return true,
+                    "fullscreen" if win.fullscreen => return true,
+                    _ => {}
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Toggle DPMS power state across outputs.
+    pub fn toggle_dpms(&mut self) -> bool {
+        self.dpms_enabled = !self.dpms_enabled;
+        tracing::info!("DPMS state toggled: enabled={}", self.dpms_enabled);
+        self.dpms_enabled
+    }
     /// window list. Moving the window through `State` after evaluating rules is
     /// therefore essential: changing only `Window::workspace_id` leaves a
     /// window visible on the wrong workspace.

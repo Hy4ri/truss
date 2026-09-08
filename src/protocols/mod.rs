@@ -2,6 +2,7 @@ pub mod compositor;
 pub mod data_device;
 pub mod decoration;
 pub mod fractional_scale;
+pub mod idle;
 pub mod layer_shell;
 pub mod output;
 pub mod seat;

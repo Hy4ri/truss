@@ -22,6 +22,7 @@ fn test_window_rule_matching_and_apply() {
         initial_size: None,
         initial_position: None,
         opacity: None,
+        idle_inhibit: None,
     };
 
     let rule = WindowRule::new("float-audio", matcher, action);
@@ -185,4 +186,36 @@ fn test_window_rule_opacity_and_settings() {
     manager.evaluate_and_apply(&mut win);
 
     assert_eq!(win.opacity, Some(75));
+}
+
+#[test]
+fn test_window_rule_idle_inhibit_and_dpms() {
+    let cfg = LuaConfig::new().expect("Failed to initialize LuaConfig");
+    cfg.load_string(
+        r#"
+        truss.window_rule({
+            match = { title = "YouTube" },
+            idle_inhibit = "always",
+        })
+        truss.window_rule({
+            match = { class = "mpv" },
+            idle_inhibit = "fullscreen",
+        })
+        truss.keybind("SUPER+SHIFT", "p", truss.cmd.dpms_toggle())
+    "#,
+    )
+    .expect("Failed to load lua rule");
+
+    let mut manager = WindowRuleManager::new();
+    cfg.apply_rules_to_manager(&mut manager);
+
+    let mut win_yt = Window::new(WindowId(101), 1);
+    win_yt.title = Some("YouTube - Video".into());
+    manager.evaluate_and_apply(&mut win_yt);
+    assert_eq!(win_yt.idle_inhibit.as_deref(), Some("always"));
+
+    let mut win_mpv = Window::new(WindowId(102), 1);
+    win_mpv.app_id = Some("mpv".into());
+    manager.evaluate_and_apply(&mut win_mpv);
+    assert_eq!(win_mpv.idle_inhibit.as_deref(), Some("fullscreen"));
 }

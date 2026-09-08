@@ -75,6 +75,8 @@ pub struct WindowRuleAction {
     pub initial_position: Option<String>,
     /// Custom opacity stored as percent 0..=100
     pub opacity: Option<u8>,
+    /// Idle inhibitor rule ("always", "fullscreen", "none")
+    pub idle_inhibit: Option<String>,
 }
 
 /// A complete window rule with a matcher and corresponding actions.
@@ -124,6 +126,9 @@ impl WindowRule {
             }
             if let Some(op) = self.action.opacity {
                 window.opacity = Some(op);
+            }
+            if self.action.idle_inhibit.is_some() {
+                window.idle_inhibit = self.action.idle_inhibit.clone();
             }
             true
         } else {
