@@ -217,13 +217,22 @@ impl Dispatcher {
 
             Command::WorkspacePrevious => {
                 if let Some(prev_id) = state.previous_workspace_id {
-                    if state.workspaces.contains_key(&prev_id) {
-                        let current_id = state.active_workspace_id;
-                        state.switch_workspace(prev_id)?;
-                        if current_id != prev_id {
-                            self.broadcast(&Event::WorkspaceSwitched { id: prev_id });
-                        }
+                    let current_id = state.active_workspace_id;
+                    state.switch_workspace(prev_id)?;
+                    if current_id != prev_id {
+                        self.broadcast(&Event::WorkspaceSwitched { id: prev_id });
                     }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WorkspaceMoveToMonitor {
+                workspace_id,
+                monitor,
+            } => {
+                let ws_id = workspace_id.unwrap_or(state.active_workspace_id);
+                if let Some(ws) = state.workspaces.get_mut(&ws_id) {
+                    ws.output = Some(monitor.clone());
                 }
                 Ok(DispatchResult::Ok)
             }
