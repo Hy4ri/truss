@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
@@ -232,22 +232,28 @@ pub fn handle_msg_command(
     let req_json = serde_json::to_string(&req)?;
     stream.write_all(format!("{req_json}\n").as_bytes())?;
 
-    let mut buf = [0u8; 8192];
-    let n = stream.read(&mut buf)?;
-    if n > 0 {
-        let resp: IpcResponse = serde_json::from_slice(&buf[..n])?;
-        if resp.ok {
-            if let Some(res) = resp.result {
-                println!("{}", serde_json::to_string_pretty(&res)?);
+    let reader = BufReader::new(stream);
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(resp) = serde_json::from_str::<IpcResponse>(trimmed) {
+            if resp.ok {
+                if let Some(res) = resp.result {
+                    println!("{}", serde_json::to_string_pretty(&res)?);
+                } else {
+                    println!("OK");
+                }
             } else {
-                println!("OK");
+                eprintln!(
+                    "Error: {}",
+                    resp.error.unwrap_or_else(|| "Unknown error".into())
+                );
+                std::process::exit(1);
             }
-        } else {
-            eprintln!(
-                "Error: {}",
-                resp.error.unwrap_or_else(|| "Unknown error".into())
-            );
-            std::process::exit(1);
+            break;
         }
     }
 
