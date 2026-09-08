@@ -144,6 +144,14 @@ truss.set("kb_options", "grp:alt_shift_toggle,caps:escape") -- XKB options
 truss.set("repeat_rate", 35)     -- key repeat rate in Hz
 truss.set("repeat_delay", 200)   -- key repeat delay in ms
 truss.set("numlock_by_default", true) -- activate NumLock on start
+
+-- Declarative Monitor Setup
+truss.monitor({
+  output = "eDP-1",
+  mode = "1920x1080@120.02",
+  position = "0x0",
+  scale = 1.0,
+})
 ```
 
 ### Window Rules

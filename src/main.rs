@@ -89,6 +89,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     app.lua_config.apply_rules_to_manager(&mut app.window_rules);
+    app.lua_config
+        .apply_monitors_to_manager(&mut app.output_manager);
+    for output in &app.output_manager.outputs {
+        app.output_manager.apply_monitor_config_to_output(output);
+    }
     app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
     app.lua_config.apply_keybindings(&mut app.keybindings);
     app.lua_config.apply_settings(
