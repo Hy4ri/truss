@@ -147,11 +147,20 @@ truss.set("numlock_by_default", true) -- activate NumLock on start
 ### Window Rules
 Declarative window placement and layout rules:
 ```lua
--- Hyprland-style syntax:
+-- Modern Hyprland-style syntax:
 truss.window_rule({
     match = { class = "(pavucontrol|qalculate-gtk)" },
     float = true,
     center = true,
+})
+
+-- PIP / Sticky dialog with size and position rules:
+truss.window_rule({
+    match = { title = "(Picture-in-Picture)$" },
+    float = true,
+    pin = true,
+    size = "25% 25%",     -- percentage of usable screen or "400 300"
+    move = "72% 7%",       -- percentage offset or "1380 60"
 })
 
 -- Named rule syntax:

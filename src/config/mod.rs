@@ -394,6 +394,12 @@ impl LuaConfig {
                     if let Ok(mlua::Value::Boolean(pin)) = rule_table.get::<mlua::Value>("pin") {
                         action.pin = Some(pin);
                     }
+                    if let Ok(size_str) = rule_table.get::<String>("size") {
+                        action.initial_size = Some(size_str);
+                    }
+                    if let Ok(move_str) = rule_table.get::<String>("move") {
+                        action.initial_position = Some(move_str);
+                    }
 
                     manager.add_rule(WindowRule::new(name, matcher, action));
                 }

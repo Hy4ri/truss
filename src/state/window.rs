@@ -38,6 +38,8 @@ pub struct Window {
     pub fullscreen: bool,
     pub maximized: bool,
     pub saved_geometry: Option<Rect>,
+    pub initial_size: Option<String>,
+    pub initial_position: Option<String>,
 }
 
 impl Window {
@@ -54,6 +56,8 @@ impl Window {
             fullscreen: false,
             maximized: false,
             saved_geometry: None,
+            initial_size: None,
+            initial_position: None,
         }
     }
 }
