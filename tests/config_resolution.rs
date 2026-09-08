@@ -643,6 +643,58 @@ fn test_smart_borders_and_gaps_settings() {
 }
 
 #[test]
+fn test_move_to_workspace_silent_binding() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.keybind("SUPER+CTRL", "3", truss.cmd.move_to_workspace_silent(3))
+        truss.keybind("SUPER+SHIFT", "3", truss.cmd.move_to_workspace(3))
+    "#,
+    )
+    .unwrap();
+
+    let mut kb = truss::Keybindings::new();
+    cfg.apply_keybindings(&mut kb);
+
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+
+    let w1 = state.create_window(Some(1)).unwrap();
+    state.focus_window(w1).unwrap();
+    assert_eq!(state.active_workspace_id, 1);
+    assert_eq!(state.windows.get(&w1).unwrap().workspace_id, 1);
+
+    let super_ctrl_mod = truss::Modifiers {
+        logo: true,
+        ctrl: true,
+        ..truss::Modifiers::NONE
+    };
+
+    // '3' is 0x0033
+    let action = kb.match_action(super_ctrl_mod, 0x0033).unwrap();
+    kb.execute_action(action, &mut dispatcher, &mut state)
+        .unwrap();
+
+    // Window moved to workspace 3, but active workspace stayed 1 (silent!)
+    assert_eq!(state.windows.get(&w1).unwrap().workspace_id, 3);
+    assert_eq!(state.active_workspace_id, 1);
+
+    // Now test move_to_workspace (follows window)
+    let w2 = state.create_window(Some(1)).unwrap();
+    state.focus_window(w2).unwrap();
+    let super_shift_mod = truss::Modifiers {
+        logo: true,
+        shift: true,
+        ..truss::Modifiers::NONE
+    };
+    let action_follow = kb.match_action(super_shift_mod, 0x0033).unwrap();
+    kb.execute_action(action_follow, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.windows.get(&w2).unwrap().workspace_id, 3);
+    assert_eq!(state.active_workspace_id, 3);
+}
+
+#[test]
 fn test_config_watcher_detects_file_save() {
     use truss::config::ConfigWatcher;
 

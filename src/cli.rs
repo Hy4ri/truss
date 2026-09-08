@@ -125,6 +125,8 @@ IPC COMMANDS:
     truss msg close-window [ID]          Close target/focused window
     truss msg toggle-floating [ID]       Toggle floating mode
     truss msg toggle-fullscreen [ID]     Toggle fullscreen mode
+    truss msg move-to-workspace <WS> [W] Move window to workspace (and follow)
+    truss msg move-to-workspace-silent <WS> [W] Move window to workspace (stay on current)
     truss msg layout-set <LAYOUT>        Set active workspace layout (master, monocle)
     truss msg set-gap <PIXELS>           Set window inner/outer gap
     truss msg set-ratio <FLOAT>          Set master area ratio (0.1 - 0.9)
@@ -190,6 +192,28 @@ pub fn handle_msg_command(
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(WindowId);
             Command::WindowToggleFullscreen { id }
+        }
+        "move-to-workspace" => {
+            let ws_id: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let win_id = args
+                .get(2)
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(WindowId);
+            Command::WindowMoveToWorkspace {
+                window_id: win_id,
+                workspace_id: ws_id,
+            }
+        }
+        "move-to-workspace-silent" => {
+            let ws_id: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let win_id = args
+                .get(2)
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(WindowId);
+            Command::WindowMoveToWorkspaceSilent {
+                window_id: win_id,
+                workspace_id: ws_id,
+            }
         }
         "layout-set" => {
             let layout = args.get(1).cloned().unwrap_or_else(|| "master".into());

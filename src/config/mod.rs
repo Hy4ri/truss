@@ -202,14 +202,23 @@ impl LuaConfig {
         cmd_table.set("focus_last_window", focus_last_win.clone())?;
         cmd_table.set("window_focus_last", focus_last_win)?;
 
-        let move_to_ws = self.lua.create_function(|lua, ws: u32| {
+        let move_to_ws = self.lua.create_function(|lua, id: u32| {
             let cmd = Command::WindowMoveToWorkspace {
                 window_id: None,
-                workspace_id: ws,
+                workspace_id: id,
             };
             lua.to_value(&cmd)
         })?;
         cmd_table.set("move_to_workspace", move_to_ws)?;
+
+        let move_to_ws_silent = self.lua.create_function(|lua, id: u32| {
+            let cmd = Command::WindowMoveToWorkspaceSilent {
+                window_id: None,
+                workspace_id: id,
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("move_to_workspace_silent", move_to_ws_silent)?;
 
         let win_focus_dir = self.lua.create_function(|lua, dir: String| {
             let direction = match dir.to_lowercase().as_str() {
