@@ -139,6 +139,26 @@ pub struct App {
     pub display_handle: smithay::reexports::wayland_server::DisplayHandle,
 }
 
+fn parse_dim_or_pct(input: &str, total: u32) -> Option<u32> {
+    let s = input.trim();
+    if let Some(pct_str) = s.strip_suffix('%') {
+        let pct = pct_str.trim().parse::<f64>().ok()?;
+        Some(((total as f64) * (pct / 100.0)).round().max(1.0) as u32)
+    } else {
+        s.parse::<u32>().ok()
+    }
+}
+
+fn parse_pos_or_pct(input: &str, total: u32, origin: i32) -> Option<i32> {
+    let s = input.trim();
+    if let Some(pct_str) = s.strip_suffix('%') {
+        let pct = pct_str.trim().parse::<f64>().ok()?;
+        Some(origin + ((total as f64) * (pct / 100.0)).round() as i32)
+    } else {
+        s.parse::<i32>().ok().map(|v| origin + v)
+    }
+}
+
 impl App {
     pub fn new(display: &mut Display<Self>, ipc_socket_name: &str) -> Result<Self, std::io::Error> {
         let dh = display.handle();
@@ -317,26 +337,52 @@ impl App {
             self.window_rules.evaluate_and_apply(window);
         }
 
-        // If window is floating and requested center = true, center it on usable area
+        // If window is floating and requested initial size / position / center, calculate geometry
         let usable_area = self.output_manager.primary_usable_area();
         if let Some(window) = self.state.windows.get_mut(&window_id) {
-            if window.floating && window.center {
-                let win_w = if window.geometry.width > 0 {
-                    window.geometry.width
-                } else {
-                    600
-                };
-                let win_h = if window.geometry.height > 0 {
-                    window.geometry.height
-                } else {
-                    400
-                };
-                window.geometry.width = win_w;
-                window.geometry.height = win_h;
-                window.geometry.x =
-                    usable_area.x + ((usable_area.width as i32 - win_w as i32) / 2).max(0);
-                window.geometry.y =
-                    usable_area.y + ((usable_area.height as i32 - win_h as i32) / 2).max(0);
+            if window.floating {
+                if let Some(ref size_str) = window.initial_size.clone() {
+                    let parts: Vec<&str> = size_str.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        if let (Some(w), Some(h)) = (
+                            parse_dim_or_pct(parts[0], usable_area.width),
+                            parse_dim_or_pct(parts[1], usable_area.height),
+                        ) {
+                            window.geometry.width = w;
+                            window.geometry.height = h;
+                        }
+                    }
+                }
+
+                if let Some(ref move_str) = window.initial_position.clone() {
+                    let parts: Vec<&str> = move_str.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        if let (Some(x), Some(y)) = (
+                            parse_pos_or_pct(parts[0], usable_area.width, usable_area.x),
+                            parse_pos_or_pct(parts[1], usable_area.height, usable_area.y),
+                        ) {
+                            window.geometry.x = x;
+                            window.geometry.y = y;
+                        }
+                    }
+                } else if window.center {
+                    let win_w = if window.geometry.width > 0 {
+                        window.geometry.width
+                    } else {
+                        600
+                    };
+                    let win_h = if window.geometry.height > 0 {
+                        window.geometry.height
+                    } else {
+                        400
+                    };
+                    window.geometry.width = win_w;
+                    window.geometry.height = win_h;
+                    window.geometry.x =
+                        usable_area.x + ((usable_area.width as i32 - win_w as i32) / 2).max(0);
+                    window.geometry.y =
+                        usable_area.y + ((usable_area.height as i32 - win_h as i32) / 2).max(0);
+                }
             }
         }
 

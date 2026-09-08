@@ -69,6 +69,10 @@ pub struct WindowRuleAction {
     pub center: Option<bool>,
     /// Pin window across all workspaces (sticky)
     pub pin: Option<bool>,
+    /// Initial size (pixels or percentage like "800 600" or "25% 25%")
+    pub initial_size: Option<String>,
+    /// Initial move/position (pixels or percentage like "100 100" or "72% 7%")
+    pub initial_position: Option<String>,
 }
 
 /// A complete window rule with a matcher and corresponding actions.
@@ -109,6 +113,12 @@ impl WindowRule {
             }
             if let Some(pin) = self.action.pin {
                 window.pinned = pin;
+            }
+            if self.action.initial_size.is_some() {
+                window.initial_size = self.action.initial_size.clone();
+            }
+            if self.action.initial_position.is_some() {
+                window.initial_position = self.action.initial_position.clone();
             }
             true
         } else {

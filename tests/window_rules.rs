@@ -19,6 +19,8 @@ fn test_window_rule_matching_and_apply() {
         open_fullscreen: None,
         center: None,
         pin: None,
+        initial_size: None,
+        initial_position: None,
     };
 
     let rule = WindowRule::new("float-audio", matcher, action);
@@ -108,4 +110,30 @@ fn test_window_rule_pin_and_toggle_cmd() {
     assert!(state.windows.get(&w_id).unwrap().pinned);
     state.toggle_pinned(w_id).unwrap();
     assert!(!state.windows.get(&w_id).unwrap().pinned);
+}
+
+#[test]
+fn test_window_rule_initial_size_and_move() {
+    let cfg = LuaConfig::new().expect("Failed to initialize LuaConfig");
+    cfg.load_string(
+        r#"
+        truss.window_rule({
+            match = { title = "PIP" },
+            float = true,
+            size = "500 400",
+            ["move"] = "100 200",
+        })
+    "#,
+    )
+    .expect("Failed to load lua rule");
+
+    let mut manager = WindowRuleManager::new();
+    cfg.apply_rules_to_manager(&mut manager);
+
+    let mut win = Window::new(WindowId(44), 1);
+    win.title = Some("PIP".into());
+    manager.evaluate_and_apply(&mut win);
+
+    assert_eq!(win.initial_size.as_deref(), Some("500 400"));
+    assert_eq!(win.initial_position.as_deref(), Some("100 200"));
 }
