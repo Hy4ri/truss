@@ -707,6 +707,39 @@ fn test_move_to_workspace_silent_binding() {
 }
 
 #[test]
+fn test_zoom_commands_and_lua_bindings() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.keybind("SUPER", "equal", truss.cmd.zoom_change(0.2))
+        truss.keybind("SUPER", "0", truss.cmd.zoom_reset())
+    "#,
+    )
+    .unwrap();
+
+    let mut bindings = truss::input::Keybindings::new();
+    cfg.apply_keybindings(&mut bindings);
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+
+    let sym = truss::input::keysym_from_name("equal").unwrap();
+    let action = bindings
+        .match_action(
+            truss::input::Modifiers {
+                logo: true,
+                ..Default::default()
+            },
+            sym,
+        )
+        .unwrap();
+
+    let res = bindings
+        .execute_action(action, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(res, truss::dispatch::DispatchResult::Ok);
+}
+
+#[test]
 fn test_special_scratchpad_workspace() {
     let mut state = truss::state::State::new();
     let w1 = state.create_window(None).unwrap();

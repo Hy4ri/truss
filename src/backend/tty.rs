@@ -136,6 +136,12 @@ impl TtyBackend {
                                     })
                                     .cloned()
                                 {
+                                    if let crate::input::KeyAction::Dispatch(crate::dispatch::Command::ZoomChange { delta }) = &action {
+                                        data.zoom_factor = (data.zoom_factor + delta).clamp(1.0, 5.0);
+                                    } else if let crate::input::KeyAction::Dispatch(crate::dispatch::Command::ZoomReset) = &action {
+                                        data.zoom_factor = 1.0;
+                                    }
+
                                     let _ = data.keybindings.execute_action(
                                         &action,
                                         &mut data.dispatcher,

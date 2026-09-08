@@ -24,6 +24,12 @@ pub enum Command {
     #[serde(rename = "window.move_to_special")]
     WindowMoveToSpecial { window_id: Option<WindowId> },
 
+    #[serde(rename = "render.zoom_change")]
+    ZoomChange { delta: f32 },
+
+    #[serde(rename = "render.zoom_reset")]
+    ZoomReset,
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 

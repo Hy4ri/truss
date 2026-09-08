@@ -113,6 +113,12 @@ impl IpcServer {
                                                                     .state
                                                                     .active_workspace()
                                                                     .focused_window;
+                                                                if let crate::dispatch::Command::ZoomChange { delta } = &req.command {
+                                                                    app.zoom_factor = (app.zoom_factor + delta).clamp(1.0, 5.0);
+                                                                } else if let crate::dispatch::Command::ZoomReset = &req.command {
+                                                                    app.zoom_factor = 1.0;
+                                                                }
+
                                                                 match app.dispatcher.dispatch(
                                                                     &mut app.state,
                                                                     req.command,
