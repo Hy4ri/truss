@@ -537,6 +537,79 @@ fn test_reload_config_lifecycle_and_error_recovery() {
 }
 
 #[test]
+fn test_workspace_and_focus_history_lua_bindings() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.keybind("SUPER", "Tab", truss.cmd.workspace_next())
+        truss.keybind("SUPER+SHIFT", "Tab", truss.cmd.workspace_prev())
+        truss.keybind("SUPER", "grave", truss.cmd.workspace_previous())
+        truss.keybind("ALT", "Tab", truss.cmd.focus_last_window())
+    "#,
+    )
+    .unwrap();
+
+    let mut kb = truss::Keybindings::new();
+    cfg.apply_keybindings(&mut kb);
+
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+
+    // SUPER+Tab -> workspace_next (0xff09 is Tab keysym)
+    let super_mod = truss::Modifiers {
+        logo: true,
+        ..truss::Modifiers::NONE
+    };
+    let super_shift_mod = truss::Modifiers {
+        logo: true,
+        shift: true,
+        ..truss::Modifiers::NONE
+    };
+    let alt_mod = truss::Modifiers {
+        alt: true,
+        ..truss::Modifiers::NONE
+    };
+
+    let action_next = kb.match_action(super_mod, 0xff09).unwrap();
+    kb.execute_action(action_next, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.active_workspace_id, 2);
+
+    let action_prev = kb.match_action(super_shift_mod, 0xff09).unwrap();
+    kb.execute_action(action_prev, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.active_workspace_id, 1);
+
+    // SUPER+grave -> workspace_previous (0x0060 is grave keysym)
+    // First switch 1 -> 5
+    state.switch_workspace(5).unwrap();
+    assert_eq!(state.active_workspace_id, 5);
+    assert_eq!(state.previous_workspace_id, Some(1));
+
+    let action_hist = kb.match_action(super_mod, 0x0060).unwrap();
+    kb.execute_action(action_hist, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.active_workspace_id, 1);
+    assert_eq!(state.previous_workspace_id, Some(5));
+
+    // ALT+Tab -> focus_last_window
+    let w1 = state.create_window(Some(1)).unwrap();
+    let w2 = state.create_window(Some(1)).unwrap();
+    state.focus_window(w1).unwrap();
+    state.focus_window(w2).unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w2));
+
+    let action_alt_tab = kb.match_action(alt_mod, 0xff09).unwrap();
+    kb.execute_action(action_alt_tab, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w1));
+
+    kb.execute_action(action_alt_tab, &mut dispatcher, &mut state)
+        .unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w2));
+}
+
+#[test]
 fn test_config_watcher_detects_file_save() {
     use truss::config::ConfigWatcher;
 

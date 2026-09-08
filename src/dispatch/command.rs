@@ -9,11 +9,23 @@ pub enum Command {
     #[serde(rename = "workspace.switch")]
     WorkspaceSwitch { id: u32 },
 
+    #[serde(rename = "workspace.next")]
+    WorkspaceNext,
+
+    #[serde(rename = "workspace.prev")]
+    WorkspacePrev,
+
+    #[serde(rename = "workspace.previous")]
+    WorkspacePrevious,
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 
     #[serde(rename = "window.focus_dir")]
     WindowFocusDir { direction: Direction },
+
+    #[serde(rename = "window.focus_last")]
+    WindowFocusLast,
 
     #[serde(rename = "window.swap_master")]
     WindowSwapMaster,

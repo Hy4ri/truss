@@ -177,6 +177,31 @@ impl LuaConfig {
         })?;
         cmd_table.set("workspace_switch", ws_switch)?;
 
+        let ws_next = self.lua.create_function(|lua, ()| {
+            let cmd = Command::WorkspaceNext;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("workspace_next", ws_next)?;
+
+        let ws_prev = self.lua.create_function(|lua, ()| {
+            let cmd = Command::WorkspacePrev;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("workspace_prev", ws_prev)?;
+
+        let ws_previous = self.lua.create_function(|lua, ()| {
+            let cmd = Command::WorkspacePrevious;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("workspace_previous", ws_previous)?;
+
+        let focus_last_win = self.lua.create_function(|lua, ()| {
+            let cmd = Command::WindowFocusLast;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("focus_last_window", focus_last_win.clone())?;
+        cmd_table.set("window_focus_last", focus_last_win)?;
+
         let move_to_ws = self.lua.create_function(|lua, ws: u32| {
             let cmd = Command::WindowMoveToWorkspace {
                 window_id: None,

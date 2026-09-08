@@ -26,6 +26,8 @@ pub struct State {
     pub workspaces: BTreeMap<u32, Workspace>,
     pub windows: BTreeMap<WindowId, Window>,
     pub active_workspace_id: u32,
+    pub previous_workspace_id: Option<u32>,
+    pub focus_history: Vec<WindowId>,
     next_window_id: u64,
 }
 
@@ -40,6 +42,8 @@ impl Default for State {
             workspaces,
             windows: BTreeMap::new(),
             active_workspace_id: 1,
+            previous_workspace_id: None,
+            focus_history: Vec::new(),
             next_window_id: 1,
         }
     }
@@ -66,8 +70,74 @@ impl State {
         if !self.workspaces.contains_key(&id) {
             return Err(StateError::WorkspaceNotFound(id));
         }
-        self.active_workspace_id = id;
+        if self.active_workspace_id != id {
+            self.previous_workspace_id = Some(self.active_workspace_id);
+            self.active_workspace_id = id;
+        }
         Ok(())
+    }
+
+    /// Calculate next workspace ID in cycling order.
+    pub fn next_workspace_id(&self) -> Option<u32> {
+        let keys: Vec<u32> = self.workspaces.keys().copied().collect();
+        if keys.is_empty() {
+            return None;
+        }
+        let idx = keys
+            .iter()
+            .position(|&id| id == self.active_workspace_id)
+            .unwrap_or(0);
+        let next_idx = (idx + 1) % keys.len();
+        Some(keys[next_idx])
+    }
+
+    /// Calculate previous workspace ID in cycling order.
+    pub fn prev_workspace_id(&self) -> Option<u32> {
+        let keys: Vec<u32> = self.workspaces.keys().copied().collect();
+        if keys.is_empty() {
+            return None;
+        }
+        let idx = keys
+            .iter()
+            .position(|&id| id == self.active_workspace_id)
+            .unwrap_or(0);
+        let prev_idx = (idx + keys.len() - 1) % keys.len();
+        Some(keys[prev_idx])
+    }
+
+    /// Record a window focus event in MRU order.
+    pub fn record_focus(&mut self, id: WindowId) {
+        self.focus_history.retain(|&w| w != id);
+        self.focus_history.push(id);
+    }
+
+    /// Find the last active window on the requested workspace (or active workspace),
+    /// excluding the currently focused window.
+    pub fn last_focused_window(&self, workspace_id: Option<u32>) -> Option<WindowId> {
+        let ws_id = workspace_id.unwrap_or(self.active_workspace_id);
+        let current_focus = self.workspaces.get(&ws_id).and_then(|ws| ws.focused_window);
+
+        // Check MRU focus history in reverse order
+        for &win_id in self.focus_history.iter().rev() {
+            if Some(win_id) != current_focus {
+                if let Some(win) = self.windows.get(&win_id) {
+                    if win.workspace_id == ws_id {
+                        return Some(win_id);
+                    }
+                }
+            }
+        }
+
+        // Fallback: check other windows in the workspace
+        if let Some(ws) = self.workspaces.get(&ws_id) {
+            for &win_id in ws.windows.iter().rev() {
+                if Some(win_id) != current_focus && self.windows.contains_key(&win_id) {
+                    return Some(win_id);
+                }
+            }
+        }
+
+        None
     }
 
     pub fn create_window(&mut self, workspace_id: Option<u32>) -> Result<WindowId, StateError> {
@@ -85,6 +155,10 @@ impl State {
         let ws = self.workspaces.get_mut(&target_ws).unwrap();
         ws.add_window(id);
 
+        if ws.focused_window == Some(id) {
+            self.record_focus(id);
+        }
+
         Ok(id)
     }
 
@@ -96,7 +170,12 @@ impl State {
 
         if let Some(ws) = self.workspaces.get_mut(&window.workspace_id) {
             ws.remove_window(id);
+            if let Some(new_focus) = ws.focused_window {
+                self.record_focus(new_focus);
+            }
         }
+
+        self.focus_history.retain(|&w| w != id);
 
         Ok(())
     }
@@ -109,11 +188,14 @@ impl State {
         let ws_id = window.workspace_id;
 
         if ws_id != self.active_workspace_id {
+            self.previous_workspace_id = Some(self.active_workspace_id);
             self.active_workspace_id = ws_id;
         }
 
         let ws = self.workspaces.get_mut(&ws_id).unwrap();
         ws.focused_window = Some(id);
+
+        self.record_focus(id);
 
         Ok(())
     }
