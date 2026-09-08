@@ -50,6 +50,7 @@ truss.keybind("SUPER", "grave", truss.cmd.workspace_previous())
 for ws = 1, 9 do
     truss.keybind("SUPER", tostring(ws), truss.cmd.workspace_switch(ws))
     truss.keybind("SUPER+SHIFT", tostring(ws), truss.cmd.move_to_workspace(ws))
+    truss.keybind("SUPER+CTRL", tostring(ws), truss.cmd.move_to_workspace_silent(ws))
 end
 
 -- ------------------------------------------------------------------------------

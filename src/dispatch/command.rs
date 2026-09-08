@@ -48,6 +48,12 @@ pub enum Command {
         workspace_id: u32,
     },
 
+    #[serde(rename = "window.move_to_workspace_silent")]
+    WindowMoveToWorkspaceSilent {
+        window_id: Option<WindowId>,
+        workspace_id: u32,
+    },
+
     #[serde(rename = "layout.set")]
     LayoutSet { layout: String },
 

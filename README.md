@@ -169,7 +169,8 @@ truss.keybind("SUPER", "v", "kitty") -- a plain string spawns a shell command
 | `truss.cmd.close_window([id])` | Close the focused window (or the window with id `id`) |
 | `truss.cmd.toggle_floating([id])` | Toggle floating on the focused window (or the window with id `id`) |
 | `truss.cmd.toggle_fullscreen([id])` | Toggle fullscreen on the focused window (or the window with id `id`) |
-| `truss.cmd.move_to_workspace(ws)` | Move the focused window to workspace `ws` |
+| `truss.cmd.move_to_workspace(id)` | Move focused window to workspace `id` (and follow) |
+| `truss.cmd.move_to_workspace_silent(id)` | Move focused window to workspace `id` silently (stay on current) |
 | `truss.cmd.spawn("cmd")` | Spawn a shell command |
 | `truss.cmd.set_gap(n)` | Set the window gap to `n` pixels |
 | `truss.cmd.set_ratio(f)` | Set the master ratio to `f` |
