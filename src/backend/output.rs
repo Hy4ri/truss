@@ -5,6 +5,15 @@ use smithay::{
 
 use crate::state::Rect;
 
+/// Declarative monitor configuration declared via Lua
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MonitorConfig {
+    pub output: String,
+    pub mode: Option<String>,
+    pub position: Option<String>,
+    pub scale: Option<f64>,
+}
+
 /// Description of a display output's physical and layout arrangement.
 #[derive(Debug, Clone)]
 pub struct OutputInfo {
@@ -18,6 +27,7 @@ pub struct OutputInfo {
 #[derive(Debug)]
 pub struct OutputManager {
     pub outputs: Vec<Output>,
+    pub monitor_configs: Vec<MonitorConfig>,
 }
 
 impl Default for OutputManager {
@@ -30,6 +40,52 @@ impl OutputManager {
     pub fn new() -> Self {
         Self {
             outputs: Vec::new(),
+            monitor_configs: Vec::new(),
+        }
+    }
+
+    /// Add or update a declarative monitor configuration
+    pub fn add_monitor_config(&mut self, config: MonitorConfig) {
+        if let Some(existing) = self
+            .monitor_configs
+            .iter_mut()
+            .find(|m| m.output == config.output)
+        {
+            *existing = config;
+        } else {
+            self.monitor_configs.push(config);
+        }
+    }
+
+    /// Find declared monitor configuration matching an output name
+    pub fn find_monitor_config(&self, name: &str) -> Option<&MonitorConfig> {
+        self.monitor_configs
+            .iter()
+            .find(|m| m.output == name || m.output == "*")
+    }
+
+    /// Apply declared monitor configuration to an output if matching
+    pub fn apply_monitor_config_to_output(&self, output: &Output) {
+        if let Some(cfg) = self.find_monitor_config(&output.name()) {
+            let mut pos = None;
+            if let Some(ref p_str) = cfg.position {
+                let parts: Vec<&str> = p_str.split('x').collect();
+                if parts.len() == 2 {
+                    if let (Ok(x), Ok(y)) = (parts[0].parse::<i32>(), parts[1].parse::<i32>()) {
+                        pos = Some(Point::from((x, y)));
+                    }
+                }
+            }
+
+            let mut scale = None;
+            if let Some(s) = cfg.scale {
+                let scale_val = smithay::output::Scale::Fractional(s);
+                scale = Some(scale_val);
+            }
+
+            if pos.is_some() || scale.is_some() {
+                output.change_current_state(None, None, scale, pos);
+            }
         }
     }
 

@@ -31,6 +31,21 @@ truss.set("repeat_rate", 35)
 truss.set("repeat_delay", 200)
 truss.set("numlock_by_default", true)
 
+-- Declarative monitor setup (mode, position, fractional scale)
+truss.monitor({
+    output = "eDP-1",
+    mode = "1920x1080@120.02",
+    position = "0x0",
+    scale = 1.0,
+})
+
+truss.monitor({
+    output = "HDMI-A-1",
+    mode = "1920x1080@60.00",
+    position = "1920x0",
+    scale = 1.0,
+})
+
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings
 -- ------------------------------------------------------------------------------

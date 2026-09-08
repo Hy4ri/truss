@@ -442,6 +442,7 @@ pub fn discover_and_init_drm_displays(
                 (width, height).into(),
                 vrefresh * 1000,
             );
+            app.output_manager.apply_monitor_config_to_output(&output);
             let _global = output.create_global::<App>(dh);
 
             let damage_tracker = OutputDamageTracker::from_output(&output);

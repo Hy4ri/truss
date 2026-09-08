@@ -152,6 +152,20 @@ impl LuaConfig {
         })?;
         truss.set("window_rule", rule_fn)?;
 
+        let monitors = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_monitors", monitors)?;
+
+        // Helper: truss.monitor(table) - register declarative monitor configuration
+        let lua_for_monitors = self.lua.clone();
+        let monitor_fn = self.lua.create_function(move |_, mon_table: mlua::Table| {
+            let monitors: mlua::Table = lua_for_monitors.named_registry_value("_truss_monitors")?;
+            let len = monitors.raw_len();
+            monitors.set(len + 1, mon_table)?;
+            Ok(())
+        })?;
+        truss.set("monitor", monitor_fn)?;
+
         // Helper: truss.keybind(mods, key, action) - register a keybinding
         let lua_for_keybinds = self.lua.clone();
         let keybind_fn = self.lua.create_function(
@@ -374,6 +388,28 @@ impl LuaConfig {
     }
 
     /// Extract registered window rules into WindowRuleManager
+    pub fn apply_monitors_to_manager(&self, manager: &mut crate::backend::OutputManager) {
+        if let Ok(monitors) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_monitors")
+        {
+            for (_, mon_table) in monitors.pairs::<mlua::Value, mlua::Table>().flatten() {
+                if let Ok(output_name) = mon_table.get::<String>("output") {
+                    let mode = mon_table.get::<String>("mode").ok();
+                    let position = mon_table.get::<String>("position").ok();
+                    let scale = mon_table.get::<f64>("scale").ok();
+
+                    manager.add_monitor_config(crate::backend::output::MonitorConfig {
+                        output: output_name,
+                        mode,
+                        position,
+                        scale,
+                    });
+                }
+            }
+        }
+    }
+
     pub fn apply_rules_to_manager(&self, manager: &mut WindowRuleManager) {
         if let Ok(rules) = self.lua.named_registry_value::<mlua::Table>("_truss_rules") {
             for entry in rules.sequence_values::<mlua::Table>().flatten() {

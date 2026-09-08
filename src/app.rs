@@ -528,6 +528,11 @@ impl App {
         self.window_rules.clear();
         self.lua_config
             .apply_rules_to_manager(&mut self.window_rules);
+        self.lua_config
+            .apply_monitors_to_manager(&mut self.output_manager);
+        for output in &self.output_manager.outputs {
+            self.output_manager.apply_monitor_config_to_output(output);
+        }
         self.keybindings.clear();
         self.lua_config.apply_keybindings(&mut self.keybindings);
         self.lua_config.apply_settings(
