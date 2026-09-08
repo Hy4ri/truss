@@ -133,28 +133,38 @@ impl TtyBackend {
                             .collect();
 
                         let mut refresh_needed = false;
-                        for (dir, _) in gesture_actions {
+                        for (dir, action) in gesture_actions {
                             if dir == "horizontal" && swipe_accum_x.abs() > 50.0 {
-                                if swipe_accum_x < 0.0 {
-                                    let _ = state.dispatcher.dispatch(
-                                        &mut state.state,
-                                        crate::dispatch::Command::WorkspaceNext,
-                                    );
-                                } else {
-                                    let _ = state.dispatcher.dispatch(
-                                        &mut state.state,
-                                        crate::dispatch::Command::WorkspacePrev,
-                                    );
+                                match action.as_str() {
+                                    "workspace_swipe" | "workspace" => {
+                                        if swipe_accum_x < 0.0 {
+                                            let _ = state.dispatcher.dispatch(
+                                                &mut state.state,
+                                                crate::dispatch::Command::WorkspaceNext,
+                                            );
+                                        } else {
+                                            let _ = state.dispatcher.dispatch(
+                                                &mut state.state,
+                                                crate::dispatch::Command::WorkspacePrev,
+                                            );
+                                        }
+                                        refresh_needed = true;
+                                    }
+                                    _ => {}
                                 }
-                                refresh_needed = true;
                             } else if dir == "vertical" && swipe_accum_y.abs() > 50.0 {
-                                if swipe_accum_y < 0.0 {
-                                    let _ = state.dispatcher.dispatch(
-                                        &mut state.state,
-                                        crate::dispatch::Command::WorkspaceToggleSpecial,
-                                    );
+                                match action.as_str() {
+                                    "special_workspace" | "workspace_swipe" | "toggle_special"
+                                        if swipe_accum_y < 0.0 =>
+                                    {
+                                        let _ = state.dispatcher.dispatch(
+                                            &mut state.state,
+                                            crate::dispatch::Command::WorkspaceToggleSpecial,
+                                        );
+                                        refresh_needed = true;
+                                    }
+                                    _ => {}
                                 }
-                                refresh_needed = true;
                             }
                         }
                         if refresh_needed {
