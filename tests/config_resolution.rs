@@ -610,6 +610,39 @@ fn test_workspace_and_focus_history_lua_bindings() {
 }
 
 #[test]
+fn test_smart_borders_and_gaps_settings() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.set("smart_borders", true)
+        truss.set("smart_gaps", true)
+    "#,
+    )
+    .unwrap();
+
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+    let mut bg_color = smithay::backend::renderer::Color32F::new(0.0, 0.0, 0.0, 1.0);
+    let mut border_config = truss::BorderConfig::default();
+    let mut focus_mode = truss::FocusMode::default();
+    let mut keyboard_config = truss::KeyboardConfig::default();
+    let mut auto_reload = false;
+
+    cfg.apply_settings(
+        &mut dispatcher,
+        &mut state,
+        &mut bg_color,
+        &mut border_config,
+        &mut focus_mode,
+        &mut keyboard_config,
+        &mut auto_reload,
+    );
+
+    assert!(border_config.smart_borders);
+    assert!(dispatcher.layout_config.smart_gaps);
+}
+
+#[test]
 fn test_config_watcher_detects_file_save() {
     use truss::config::ConfigWatcher;
 

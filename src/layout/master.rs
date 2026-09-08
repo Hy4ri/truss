@@ -25,7 +25,11 @@ impl Layout for MasterLayout {
             return Vec::new();
         }
 
-        let gap = config.gap as i32;
+        let gap = if n == 1 && config.smart_gaps {
+            0
+        } else {
+            config.gap as i32
+        };
         let master_ratio = config.master_ratio.clamp(0.1, 0.9);
 
         // Case 1: Single window gets the whole usable area minus outer gap

@@ -28,6 +28,17 @@ impl Layout for GridLayout {
         let total_gap_w = gap * (cols as i32 + 1);
         let total_gap_h = gap * (rows as i32 + 1);
 
+        let gap = if windows.len() == 1 && config.smart_gaps {
+            0
+        } else {
+            gap
+        };
+        let (total_gap_w, total_gap_h) = if windows.len() == 1 && config.smart_gaps {
+            (0, 0)
+        } else {
+            (total_gap_w, total_gap_h)
+        };
+
         let avail_w = (usable_area.width as i32 - total_gap_w).max(0);
         let avail_h = (usable_area.height as i32 - total_gap_h).max(0);
 

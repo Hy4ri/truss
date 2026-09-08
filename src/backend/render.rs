@@ -100,7 +100,26 @@ pub fn collect_render_elements(
         elements.extend(win_elements.into_iter().map(TrussRenderElement::Surface));
 
         // Window borders for active and inactive windows (fullscreen windows omit borders)
-        if app.border_config.width > 0 && !window.fullscreen {
+        // If smart_borders is true and there is only 1 visible tiled window on this workspace, omit borders.
+        let is_single_tiled = if app.border_config.smart_borders {
+            let ws = app.state.active_workspace();
+            let tiled_count = ws
+                .windows
+                .iter()
+                .filter(|&&id| {
+                    if let Some(w) = app.state.windows.get(&id) {
+                        !w.floating && !w.fullscreen
+                    } else {
+                        false
+                    }
+                })
+                .count();
+            tiled_count == 1 && !window.floating
+        } else {
+            false
+        };
+
+        if app.border_config.width > 0 && !window.fullscreen && !is_single_tiled {
             let b = app.border_config.width as i32;
             let (x, y) = win_geom;
             let (w, h) = (window.geometry.width as i32, window.geometry.height as i32);

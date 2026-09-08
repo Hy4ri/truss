@@ -49,6 +49,7 @@ pub struct BorderConfig {
     pub width: u32,
     pub active_color: smithay::backend::renderer::Color32F,
     pub inactive_color: smithay::backend::renderer::Color32F,
+    pub smart_borders: bool,
 }
 
 impl Default for BorderConfig {
@@ -57,6 +58,7 @@ impl Default for BorderConfig {
             width: 2,
             active_color: smithay::backend::renderer::Color32F::new(0.502, 0.835, 0.824, 1.0), // #80d5d2
             inactive_color: smithay::backend::renderer::Color32F::new(0.20, 0.20, 0.20, 1.0), // #333333
+            smart_borders: false,
         }
     }
 }
