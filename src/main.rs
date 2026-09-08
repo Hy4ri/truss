@@ -119,9 +119,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let loop_handle = event_loop.handle();
 
     let socket_name = cli.socket_name.as_str();
-    std::env::set_var("WAYLAND_DISPLAY", socket_name);
     let listener = ListeningSocket::bind(socket_name)?;
-    info!("truss: wayland compositor running live at WAYLAND_DISPLAY={socket_name}");
+    info!("truss: wayland compositor running live at socket={socket_name}");
 
     // Accept new wayland clients
     loop_handle.insert_source(
@@ -202,6 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if let Some((mut backend, winit_event_loop)) = winit_init {
+        std::env::set_var("WAYLAND_DISPLAY", socket_name);
         info!("truss: running on Winit host window backend (nested graphical mode)");
         // Replace the phantom headless output with the real winit-backed output
         app.output_manager.remove_output("HEADLESS-1");
@@ -613,6 +613,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else if try_tty {
         match TtyBackend::init(&loop_handle, &dh, &mut app) {
             Ok(mut tty_backend) => {
+                std::env::set_var("WAYLAND_DISPLAY", socket_name);
                 info!("truss: running directly on TTY (libseat + libinput + DRM/KMS active)");
                 info!("truss: Ready! Spawn apps with SUPER+Return (or via config), or `WAYLAND_DISPLAY={socket_name} <app>`");
                 info!(
@@ -731,6 +732,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(err) => {
+                std::env::set_var("WAYLAND_DISPLAY", socket_name);
                 warn!("truss: TTY initialization skipped ({err}), falling back to headless socket mode");
                 info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
                 // Advertise the headless output so clients see a monitor
@@ -747,6 +749,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else {
+        std::env::set_var("WAYLAND_DISPLAY", socket_name);
         warn!("truss: running in forced headless mode");
         info!("truss: Ready for clients! Launch apps with `WAYLAND_DISPLAY={socket_name} <app>`");
         // Advertise the headless output so clients see a monitor
