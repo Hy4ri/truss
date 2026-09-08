@@ -605,7 +605,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            event_loop.dispatch(Duration::from_millis(500), &mut app)?;
+            event_loop.dispatch(Duration::from_millis(16), &mut app)?;
             app.process_pending_events();
             display.dispatch_clients(&mut app)?;
             display.flush_clients()?;
