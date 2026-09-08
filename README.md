@@ -152,6 +152,20 @@ truss.monitor({
   position = "0x0",
   scale = 1.0,
 })
+
+-- Per-device input settings
+truss.device({
+  name = "gaming-mouse",
+  sensitivity = 0.0,
+  accel_profile = "flat",
+})
+
+-- Touchpad Gestures
+truss.gesture({
+  fingers = 3,
+  direction = "horizontal",
+  action = "workspace_swipe",
+})
 ```
 
 ### Window Rules

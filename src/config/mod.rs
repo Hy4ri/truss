@@ -183,6 +183,37 @@ impl LuaConfig {
             })?;
         truss.set("workspace_rule", ws_rule_fn)?;
 
+        let devices = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_devices", devices)?;
+
+        // Helper: truss.device(table) - register per-device input settings
+        let lua_for_devices = self.lua.clone();
+        let device_fn = self.lua.create_function(move |_, dev_table: mlua::Table| {
+            let devices: mlua::Table = lua_for_devices.named_registry_value("_truss_devices")?;
+            let len = devices.raw_len();
+            devices.set(len + 1, dev_table)?;
+            Ok(())
+        })?;
+        truss.set("device", device_fn)?;
+
+        let gestures = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_gestures", gestures)?;
+
+        // Helper: truss.gesture(table) - register touchpad gestures
+        let lua_for_gestures = self.lua.clone();
+        let gesture_fn = self
+            .lua
+            .create_function(move |_, gesture_table: mlua::Table| {
+                let gestures: mlua::Table =
+                    lua_for_gestures.named_registry_value("_truss_gestures")?;
+                let len = gestures.raw_len();
+                gestures.set(len + 1, gesture_table)?;
+                Ok(())
+            })?;
+        truss.set("gesture", gesture_fn)?;
+
         // Helper: truss.keybind(mods, key, action) - register a keybinding
         let lua_for_keybinds = self.lua.clone();
         let keybind_fn = self.lua.create_function(
@@ -453,6 +484,57 @@ impl LuaConfig {
                     if let Some(ws) = state.workspaces.get_mut(&ws_id) {
                         ws.output = Some(monitor);
                     }
+                }
+            }
+        }
+    }
+
+    /// Extract registered device configs into a list
+    pub fn apply_device_configs(&self, configs: &mut Vec<crate::input::DeviceConfig>) {
+        if let Ok(devices) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_devices")
+        {
+            for (_, dev_table) in devices.pairs::<mlua::Value, mlua::Table>().flatten() {
+                if let Ok(name) = dev_table.get::<String>("name") {
+                    let sensitivity = dev_table.get::<f64>("sensitivity").ok();
+                    let accel_profile = dev_table.get::<String>("accel_profile").ok();
+                    let natural_scroll = dev_table.get::<bool>("natural_scroll").ok();
+                    let tap_to_click = dev_table.get::<bool>("tap_to_click").ok();
+                    let disable_while_typing = dev_table.get::<bool>("disable_while_typing").ok();
+                    let enabled = dev_table.get::<bool>("enabled").ok();
+
+                    configs.push(crate::input::DeviceConfig {
+                        name,
+                        sensitivity,
+                        accel_profile,
+                        natural_scroll,
+                        tap_to_click,
+                        disable_while_typing,
+                        enabled,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Extract registered gesture configs into a list
+    pub fn apply_gesture_configs(&self, configs: &mut Vec<crate::input::GestureConfig>) {
+        if let Ok(gestures) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_gestures")
+        {
+            for (_, gesture_table) in gestures.pairs::<mlua::Value, mlua::Table>().flatten() {
+                if let (Ok(fingers), Ok(direction), Ok(action)) = (
+                    gesture_table.get::<u32>("fingers"),
+                    gesture_table.get::<String>("direction"),
+                    gesture_table.get::<String>("action"),
+                ) {
+                    configs.push(crate::input::GestureConfig {
+                        fingers,
+                        direction,
+                        action,
+                    });
                 }
             }
         }
