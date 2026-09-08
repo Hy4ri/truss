@@ -69,9 +69,99 @@ impl TtyBackend {
         let mut current_modifiers = Modifiers::NONE;
         let mut session_for_vt = session.clone();
 
+        let mut swipe_accum_x = 0.0;
+        let mut swipe_accum_y = 0.0;
+
         loop_handle.insert_source(
             libinput_backend,
             move |event, _, state: &mut App| match event {
+                InputEvent::DeviceAdded { mut device } => {
+                    let dev_name = device.name().to_string();
+                    info!("truss: input device connected: {}", dev_name);
+                    for cfg in &state.device_configs {
+                        if dev_name.to_lowercase().contains(&cfg.name.to_lowercase()) {
+                            info!("truss: applying device config to '{}'", dev_name);
+                            if let Some(sens) = cfg.sensitivity {
+                                let _ = device.config_accel_set_speed(sens);
+                            }
+                            if let Some(ref profile) = cfg.accel_profile {
+                                match profile.as_str() {
+                                    "flat" => {
+                                        let _ = device.config_accel_set_profile(
+                                            input::AccelProfile::Flat,
+                                        );
+                                    }
+                                    "adaptive" => {
+                                        let _ = device.config_accel_set_profile(
+                                            input::AccelProfile::Adaptive,
+                                        );
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if let Some(natural) = cfg.natural_scroll {
+                                let _ = device.config_scroll_set_natural_scroll_enabled(natural);
+                            }
+                            if let Some(tap) = cfg.tap_to_click {
+                                let _ = device.config_tap_set_enabled(tap);
+                            }
+                            if let Some(dwt) = cfg.disable_while_typing {
+                                let _ = device.config_dwt_set_enabled(dwt);
+                            }
+                        }
+                    }
+                }
+                InputEvent::GestureSwipeBegin { .. } => {
+                    swipe_accum_x = 0.0;
+                    swipe_accum_y = 0.0;
+                }
+                InputEvent::GestureSwipeUpdate { event } => {
+                    use smithay::backend::input::GestureSwipeUpdateEvent;
+                    swipe_accum_x += event.delta_x();
+                    swipe_accum_y += event.delta_y();
+                }
+                InputEvent::GestureSwipeEnd { event } => {
+                    use input::event::gesture::GestureEventTrait;
+                    use smithay::backend::input::GestureEndEvent;
+                    if !event.cancelled() {
+                        let fingers = event.finger_count() as u32;
+                        let gesture_actions: Vec<(String, String)> = state
+                            .gesture_configs
+                            .iter()
+                            .filter(|g| g.fingers == fingers)
+                            .map(|g| (g.direction.clone(), g.action.clone()))
+                            .collect();
+
+                        let mut refresh_needed = false;
+                        for (dir, _) in gesture_actions {
+                            if dir == "horizontal" && swipe_accum_x.abs() > 50.0 {
+                                if swipe_accum_x < 0.0 {
+                                    let _ = state.dispatcher.dispatch(
+                                        &mut state.state,
+                                        crate::dispatch::Command::WorkspaceNext,
+                                    );
+                                } else {
+                                    let _ = state.dispatcher.dispatch(
+                                        &mut state.state,
+                                        crate::dispatch::Command::WorkspacePrev,
+                                    );
+                                }
+                                refresh_needed = true;
+                            } else if dir == "vertical" && swipe_accum_y.abs() > 50.0 {
+                                if swipe_accum_y < 0.0 {
+                                    let _ = state.dispatcher.dispatch(
+                                        &mut state.state,
+                                        crate::dispatch::Command::WorkspaceToggleSpecial,
+                                    );
+                                }
+                                refresh_needed = true;
+                            }
+                        }
+                        if refresh_needed {
+                            state.refresh_layout_and_space();
+                        }
+                    }
+                }
                 InputEvent::Keyboard { event } => {
                     let serial = smithay::utils::SERIAL_COUNTER.next_serial();
                     let time = event.time_msec();

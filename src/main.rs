@@ -95,6 +95,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.output_manager.apply_monitor_config_to_output(output);
     }
     app.lua_config.apply_workspace_rules(&mut app.state);
+    app.lua_config.apply_device_configs(&mut app.device_configs);
+    app.lua_config
+        .apply_gesture_configs(&mut app.gesture_configs);
     app.lua_config.apply_to_dispatcher(&mut app.dispatcher);
     app.lua_config.apply_keybindings(&mut app.keybindings);
     app.lua_config.apply_settings(

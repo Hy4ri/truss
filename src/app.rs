@@ -128,6 +128,8 @@ pub struct App {
     pub cursor_status: CursorImageStatus,
     pub pending_focus_window: Option<WindowId>,
     pub keybindings: Keybindings,
+    pub device_configs: Vec<crate::input::DeviceConfig>,
+    pub gesture_configs: Vec<crate::input::GestureConfig>,
     pub window_rules: WindowRuleManager,
     pub bg_color: smithay::backend::renderer::Color32F,
     pub border_config: BorderConfig,
@@ -253,6 +255,8 @@ impl App {
             cursor_status: CursorImageStatus::default_named(),
             pending_focus_window: None,
             keybindings: Keybindings::new(),
+            device_configs: Vec::new(),
+            gesture_configs: Vec::new(),
             window_rules,
             bg_color: DESKTOP_BG_COLOR,
             border_config: BorderConfig::default(),
@@ -534,6 +538,12 @@ impl App {
             self.output_manager.apply_monitor_config_to_output(output);
         }
         self.lua_config.apply_workspace_rules(&mut self.state);
+        self.device_configs.clear();
+        self.lua_config
+            .apply_device_configs(&mut self.device_configs);
+        self.gesture_configs.clear();
+        self.lua_config
+            .apply_gesture_configs(&mut self.gesture_configs);
         self.keybindings.clear();
         self.lua_config.apply_keybindings(&mut self.keybindings);
         self.lua_config.apply_settings(

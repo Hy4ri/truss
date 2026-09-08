@@ -46,6 +46,20 @@ truss.monitor({
     scale = 1.0,
 })
 
+-- Per-device input settings
+truss.device({
+    name = "touchpad",
+    tap_to_click = true,
+    natural_scroll = true,
+})
+
+-- Touchpad multi-finger gestures
+truss.gesture({
+    fingers = 3,
+    direction = "horizontal",
+    action = "workspace_swipe",
+})
+
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings
 -- ------------------------------------------------------------------------------

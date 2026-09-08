@@ -124,6 +124,48 @@ fn test_custom_keybinding_execution() {
 }
 
 #[test]
+fn test_device_and_gesture_configs() {
+    let cfg = truss::config::LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.device({
+            name = "gaming-mouse",
+            sensitivity = -0.2,
+            accel_profile = "flat",
+        })
+        truss.device({
+            name = "touchpad",
+            natural_scroll = true,
+            tap_to_click = true,
+        })
+        truss.gesture({
+            fingers = 3,
+            direction = "horizontal",
+            action = "workspace_swipe",
+        })
+    "#,
+    )
+    .unwrap();
+
+    let mut devs = Vec::new();
+    let mut gestures = Vec::new();
+    cfg.apply_device_configs(&mut devs);
+    cfg.apply_gesture_configs(&mut gestures);
+
+    assert_eq!(devs.len(), 2);
+    assert_eq!(devs[0].name, "gaming-mouse");
+    assert_eq!(devs[0].sensitivity, Some(-0.2));
+    assert_eq!(devs[0].accel_profile.as_deref(), Some("flat"));
+    assert_eq!(devs[1].natural_scroll, Some(true));
+    assert_eq!(devs[1].tap_to_click, Some(true));
+
+    assert_eq!(gestures.len(), 1);
+    assert_eq!(gestures[0].fingers, 3);
+    assert_eq!(gestures[0].direction, "horizontal");
+    assert_eq!(gestures[0].action, "workspace_swipe");
+}
+
+#[test]
 fn test_pointer_location_update_and_clamping() {
     let mut ptr = PointerState::new();
     let bounds = Rect::new(0, 0, 1920, 1080);

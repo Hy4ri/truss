@@ -615,6 +615,7 @@ dependencies = [
  "bitflags 2.13.1",
  "input-sys",
  "libc",
+ "log",
  "udev",
 ]
 
@@ -1872,6 +1873,7 @@ dependencies = [
 name = "truss"
 version = "0.1.0"
 dependencies = [
+ "input",
  "libc",
  "mlua",
  "serde",
