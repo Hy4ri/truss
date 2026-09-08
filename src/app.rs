@@ -641,6 +641,48 @@ impl App {
             area,
             full_area,
         );
+
+        // For pinned windows that belong to other workspaces, recompute their geometry
+        // relative to the currently active output so they don't get stuck in their home monitor coordinates.
+        for win in self.state.windows.values_mut() {
+            if win.pinned && win.workspace_id != active_ws {
+                if win.floating {
+                    // Center floating pinned windows if needed or keep them clamped inside current usable area
+                    if win.center {
+                        let win_w = if win.geometry.width > 0 {
+                            win.geometry.width
+                        } else {
+                            600
+                        };
+                        let win_h = if win.geometry.height > 0 {
+                            win.geometry.height
+                        } else {
+                            400
+                        };
+                        win.geometry.width = win_w;
+                        win.geometry.height = win_h;
+                        win.geometry.x = area.x + ((area.width as i32 - win_w as i32) / 2).max(0);
+                        win.geometry.y = area.y + ((area.height as i32 - win_h as i32) / 2).max(0);
+                    } else {
+                        // Clamp into current usable bounds
+                        win.geometry.x = win.geometry.x.clamp(
+                            area.x,
+                            (area.x + area.width as i32).saturating_sub(win.geometry.width as i32),
+                        );
+                        win.geometry.y = win.geometry.y.clamp(
+                            area.y,
+                            (area.y + area.height as i32)
+                                .saturating_sub(win.geometry.height as i32),
+                        );
+                    }
+                } else if win.fullscreen {
+                    win.geometry = full_area;
+                } else if win.maximized {
+                    win.geometry = area;
+                }
+            }
+        }
+
         self.render_manager
             .sync_windows(&self.state, &self.surfaces);
 
