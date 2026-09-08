@@ -146,6 +146,7 @@ fn test_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
 
@@ -177,6 +178,7 @@ fn test_border_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
 
@@ -204,6 +206,7 @@ fn test_invalid_setting_warns() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
 
@@ -305,6 +308,7 @@ fn test_parse_hex_color_unicode_safe() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
 
@@ -367,6 +371,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
@@ -382,6 +387,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::Click);
@@ -397,6 +403,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
@@ -419,6 +426,7 @@ fn test_auto_reload_setting_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
     assert!(!app.auto_reload);
@@ -433,9 +441,51 @@ fn test_auto_reload_setting_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
     assert!(app.auto_reload);
+}
+
+#[test]
+fn test_keyboard_settings_applied() {
+    let _guard = APP_LOCK.lock().unwrap();
+    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
+
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.set("kb_layout", "us,ara")
+        truss.set("kb_options", "grp:alt_shift_toggle,caps:escape")
+        truss.set("repeat_rate", 40)
+        truss.set("repeat_delay", 250)
+        truss.set("numlock_by_default", true)
+    "#,
+    )
+    .unwrap();
+
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+        &mut app.keyboard_config,
+        &mut app.auto_reload,
+    );
+
+    assert_eq!(app.keyboard_config.layout, "us,ara");
+    assert_eq!(
+        app.keyboard_config.options.as_deref(),
+        Some("grp:alt_shift_toggle,caps:escape")
+    );
+    assert_eq!(app.keyboard_config.repeat_rate, 40);
+    assert_eq!(app.keyboard_config.repeat_delay, 250);
+    assert!(app.keyboard_config.numlock_by_default);
+
+    // Test that applying to keyboard handle compiles and updates state without panicking
+    app.update_keyboard_config();
 }
 
 #[test]

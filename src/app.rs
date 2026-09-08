@@ -61,6 +61,33 @@ impl Default for BorderConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyboardConfig {
+    pub rules: String,
+    pub model: String,
+    pub layout: String,
+    pub variant: String,
+    pub options: Option<String>,
+    pub repeat_rate: i32,
+    pub repeat_delay: i32,
+    pub numlock_by_default: bool,
+}
+
+impl Default for KeyboardConfig {
+    fn default() -> Self {
+        Self {
+            rules: String::new(),
+            model: String::new(),
+            layout: String::new(),
+            variant: String::new(),
+            options: None,
+            repeat_rate: 25,
+            repeat_delay: 200,
+            numlock_by_default: false,
+        }
+    }
+}
+
 pub struct App {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
@@ -83,6 +110,7 @@ pub struct App {
     pub bg_color: smithay::backend::renderer::Color32F,
     pub border_config: BorderConfig,
     pub focus_mode: FocusMode,
+    pub keyboard_config: KeyboardConfig,
     pub config_path: Option<std::path::PathBuf>,
     pub auto_reload: bool,
     pub output_manager: OutputManager,
@@ -180,6 +208,7 @@ impl App {
             bg_color: DESKTOP_BG_COLOR,
             border_config: BorderConfig::default(),
             focus_mode: FocusMode::default(),
+            keyboard_config: KeyboardConfig::default(),
             config_path: None,
             auto_reload: true,
             output_manager,
@@ -314,6 +343,47 @@ impl App {
             .move_window_to_workspace(window_id, requested_workspace);
     }
 
+    /// Apply current `keyboard_config` to the active keyboard handle.
+    pub fn update_keyboard_config(&mut self) {
+        let Some(keyboard) = self.keyboard.clone() else {
+            return;
+        };
+
+        let rules = self.keyboard_config.rules.clone();
+        let model = self.keyboard_config.model.clone();
+        let layout = self.keyboard_config.layout.clone();
+        let variant = self.keyboard_config.variant.clone();
+        let options = self.keyboard_config.options.clone();
+        let repeat_rate = self.keyboard_config.repeat_rate;
+        let repeat_delay = self.keyboard_config.repeat_delay;
+        let numlock_by_default = self.keyboard_config.numlock_by_default;
+
+        let xkb_config = XkbConfig {
+            rules: &rules,
+            model: &model,
+            layout: &layout,
+            variant: &variant,
+            options,
+        };
+
+        if let Err(e) = keyboard.set_xkb_config(self, xkb_config) {
+            warn!("truss: failed to apply XKB keyboard configuration: {e}");
+        } else {
+            tracing::info!(
+                "truss: applied keyboard configuration: layout='{layout}', options='{:?}'",
+                self.keyboard_config.options
+            );
+        }
+
+        keyboard.change_repeat_info(repeat_rate, repeat_delay);
+
+        if numlock_by_default {
+            let mut mods = keyboard.modifier_state();
+            mods.num_lock = true;
+            keyboard.set_modifier_state(mods);
+        }
+    }
+
     /// Reload configuration from `self.config_path` if available.
     pub fn reload_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let Some(path) = self.config_path.clone() else {
@@ -336,8 +406,10 @@ impl App {
             &mut self.bg_color,
             &mut self.border_config,
             &mut self.focus_mode,
+            &mut self.keyboard_config,
             &mut self.auto_reload,
         );
+        self.update_keyboard_config();
         self.lua_config.apply_to_dispatcher(&mut self.dispatcher);
         self.refresh_layout_and_space();
         self.needs_redraw = true;

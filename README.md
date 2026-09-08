@@ -135,6 +135,11 @@ truss.set("active_border_color", "#80d5d2")   -- active window border color
 truss.set("inactive_border_color", "#333333") -- inactive window border color
 truss.set("focus_mode", "click") -- "click" (default) or "follow_mouse" / "sloppy"
 truss.set("auto_reload", true)   -- automatically reload config when saved (default: true)
+truss.set("kb_layout", "us,ara") -- keyboard layouts (comma separated)
+truss.set("kb_options", "grp:alt_shift_toggle,caps:escape") -- XKB options
+truss.set("repeat_rate", 35)     -- key repeat rate in Hz
+truss.set("repeat_delay", 200)   -- key repeat delay in ms
+truss.set("numlock_by_default", true) -- activate NumLock on start
 ```
 
 ### Keybindings

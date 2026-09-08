@@ -97,8 +97,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.keyboard_config,
         &mut app.auto_reload,
     );
+    app.update_keyboard_config();
 
     let dh = display.handle();
     let mut listener_dh = dh.clone();
@@ -244,11 +246,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let sym = handle.modified_sym().raw();
                                 let raw_sym =
                                     handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
+                                let latin_sym = handle
+                                    .raw_latin_sym_or_raw_current_sym()
+                                    .map(|s| s.raw())
+                                    .unwrap_or(sym);
+
                                 if let Some(action) = data
                                     .keybindings
                                     .match_action(current_modifiers, sym)
                                     .or_else(|| {
                                         data.keybindings.match_action(current_modifiers, raw_sym)
+                                    })
+                                    .or_else(|| {
+                                        data.keybindings.match_action(current_modifiers, latin_sym)
                                     })
                                     .cloned()
                                 {

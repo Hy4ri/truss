@@ -20,6 +20,12 @@ truss.set("inactive_border_color", "#333333")
 truss.set("focus_mode", "click")
 -- Auto reload configuration when config file is saved
 truss.set("auto_reload", true)
+-- Keyboard layout, options and key repeat
+truss.set("kb_layout", "us,ara")
+truss.set("kb_options", "grp:alt_shift_toggle,caps:escape")
+truss.set("repeat_rate", 35)
+truss.set("repeat_delay", 200)
+truss.set("numlock_by_default", true)
 
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings
