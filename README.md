@@ -234,6 +234,9 @@ truss.keybind("SUPER", "v", "kitty") -- a plain string spawns a shell command
 | `truss.cmd.zoom_change(delta)` | Adjust screen zoom factor centered on cursor (+0.1, -0.1) |
 | `truss.cmd.zoom_reset()` | Reset screen zoom factor to 1.0 |
 | `truss.cmd.dpms_toggle()` | Toggle display power management (DPMS) screen state |
+| `truss.cmd.toggle_group()` | Toggle tabbed group membership for focused window |
+| `truss.cmd.group_next()` | Focus next window in active tabbed group |
+| `truss.cmd.group_prev()` | Focus previous window in active tabbed group |
 | `truss.cmd.move_workspace_to_monitor(monitor, [ws])` | Move workspace to target monitor output |
 | `truss.cmd.move_to_workspace(id)` | Move focused window to workspace `id` (and follow) |
 | `truss.cmd.move_to_workspace_silent(id)` | Move focused window to workspace `id` silently (stay on current) |
