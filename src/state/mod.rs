@@ -307,7 +307,7 @@ impl State {
             window.maximized = true;
         } else {
             window.maximized = false;
-            if window.floating && !window.fullscreen {
+            if window.floating {
                 if let Some(saved) = window.saved_geometry.take() {
                     window.geometry = saved;
                 }
