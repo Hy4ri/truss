@@ -58,6 +58,24 @@ impl RenderManager {
 
         // 2. Map and position active workspace windows according to state geometry (including pinned/special)
         let mut visible_windows = active_ws.windows.clone();
+        // If windows share a group_id, only render the active/focused one (or the first one)
+        let active_win_id = active_ws.focused_window;
+        let mut group_rendered = std::collections::HashSet::new();
+        visible_windows.retain(|wid| {
+            if let Some(win) = state.windows.get(wid) {
+                if let Some(gid) = win.group_id {
+                    if Some(*wid) == active_win_id {
+                        group_rendered.insert(gid);
+                        return true;
+                    }
+                    if group_rendered.contains(&gid) {
+                        return false;
+                    }
+                    group_rendered.insert(gid);
+                }
+            }
+            true
+        });
         for (&wid, win) in &state.windows {
             if win.pinned && !visible_windows.contains(&wid) {
                 visible_windows.push(wid);

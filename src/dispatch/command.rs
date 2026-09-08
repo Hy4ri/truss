@@ -39,6 +39,15 @@ pub enum Command {
         monitor: String,
     },
 
+    #[serde(rename = "group.toggle")]
+    GroupToggle,
+
+    #[serde(rename = "group.next")]
+    GroupNext,
+
+    #[serde(rename = "group.prev")]
+    GroupPrev,
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 

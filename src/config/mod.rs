@@ -303,6 +303,25 @@ impl LuaConfig {
         })?;
         cmd_table.set("dpms_toggle", dpms_toggle)?;
 
+        let group_toggle = self.lua.create_function(|lua, ()| {
+            let cmd = Command::GroupToggle;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("toggle_group", group_toggle.clone())?;
+        cmd_table.set("group_toggle", group_toggle)?;
+
+        let group_next = self.lua.create_function(|lua, ()| {
+            let cmd = Command::GroupNext;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("group_next", group_next)?;
+
+        let group_prev = self.lua.create_function(|lua, ()| {
+            let cmd = Command::GroupPrev;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("group_prev", group_prev)?;
+
         let move_ws_mon =
             self.lua
                 .create_function(|lua, (monitor, ws_id): (String, Option<u32>)| {

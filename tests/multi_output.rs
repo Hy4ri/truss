@@ -123,3 +123,38 @@ fn test_workspace_output_binding_and_move() {
         Some("HDMI-A-1")
     );
 }
+
+#[test]
+fn test_tabbed_grouping_and_navigation() {
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+
+    let w1 = state.create_window(Some(1)).unwrap();
+    let w2 = state.create_window(Some(1)).unwrap();
+
+    state.focus_window(w1).unwrap();
+    dispatcher
+        .dispatch(&mut state, truss::dispatch::Command::GroupToggle)
+        .unwrap();
+
+    let g1 = state.windows.get(&w1).unwrap().group_id;
+    let g2 = state.windows.get(&w2).unwrap().group_id;
+    assert!(g1.is_some());
+    assert_eq!(g1, g2);
+
+    dispatcher
+        .dispatch(&mut state, truss::dispatch::Command::GroupNext)
+        .unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w2));
+
+    dispatcher
+        .dispatch(&mut state, truss::dispatch::Command::GroupPrev)
+        .unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w1));
+
+    // Dissolve w1 from group
+    dispatcher
+        .dispatch(&mut state, truss::dispatch::Command::GroupToggle)
+        .unwrap();
+    assert!(state.windows.get(&w1).unwrap().group_id.is_none());
+}

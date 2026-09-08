@@ -127,21 +127,50 @@ impl Dispatcher {
         };
 
         // Filter out floating/fullscreen/maximized windows if needed, or arrange all tiled
+        // For windows in the same group_id, only include the active/focused one in tiling arrangement
+        let mut seen_groups = std::collections::HashSet::new();
         let tiled_windows: Vec<_> = window_ids
             .into_iter()
             .filter(|id| {
-                state
-                    .windows
-                    .get(id)
+                let win = state.windows.get(id);
+                let is_tiled = win
                     .map(|w| !w.floating && !w.fullscreen && !w.maximized)
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                if !is_tiled {
+                    return false;
+                }
+                if let Some(gid) = win.and_then(|w| w.group_id) {
+                    if seen_groups.contains(&gid) {
+                        return false;
+                    }
+                    seen_groups.insert(gid);
+                }
+                true
             })
             .collect();
 
         if let Some(layout) = self.layout_registry.get(&layout_name) {
             let geometries = layout.arrange(&tiled_windows, usable_area, &self.layout_config);
             for (win_id, rect) in geometries {
-                if let Some(w) = state.windows.get_mut(&win_id) {
+                let win_group = state.windows.get(&win_id).and_then(|w| w.group_id);
+                if let Some(gid) = win_group {
+                    // Sync geometry to all windows belonging to this group
+                    if let Some(ws) = state.workspaces.get(&workspace_id) {
+                        let group_wids: Vec<WindowId> = ws
+                            .windows
+                            .iter()
+                            .filter(|&&wid| {
+                                state.windows.get(&wid).and_then(|w| w.group_id) == Some(gid)
+                            })
+                            .cloned()
+                            .collect();
+                        for wid in group_wids {
+                            if let Some(w) = state.windows.get_mut(&wid) {
+                                w.geometry = rect;
+                            }
+                        }
+                    }
+                } else if let Some(w) = state.windows.get_mut(&win_id) {
                     w.geometry = rect;
                 }
             }
@@ -233,6 +262,96 @@ impl Dispatcher {
                 let ws_id = workspace_id.unwrap_or(state.active_workspace_id);
                 if let Some(ws) = state.workspaces.get_mut(&ws_id) {
                     ws.output = Some(monitor.clone());
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::GroupToggle => {
+                let focused_id = state.active_workspace().focused_window;
+                if let Some(f_id) = focused_id {
+                    let current_group = state.windows.get(&f_id).and_then(|w| w.group_id);
+                    if current_group.is_some() {
+                        // Dissolve window out of group
+                        if let Some(w) = state.windows.get_mut(&f_id) {
+                            w.group_id = None;
+                        }
+                    } else {
+                        // Find if there's another window on the active workspace to group with
+                        let active_ws = state.active_workspace().clone();
+                        let other_win = active_ws.windows.iter().find(|&&wid| wid != f_id);
+                        let target_gid = if let Some(&other_id) = other_win {
+                            let gid = state
+                                .windows
+                                .get(&other_id)
+                                .and_then(|w| w.group_id)
+                                .unwrap_or(other_id.0);
+                            if let Some(other_w) = state.windows.get_mut(&other_id) {
+                                other_w.group_id = Some(gid);
+                            }
+                            gid
+                        } else {
+                            f_id.0
+                        };
+                        if let Some(w) = state.windows.get_mut(&f_id) {
+                            w.group_id = Some(target_gid);
+                        }
+                    }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::GroupNext => {
+                let focused_id = state.active_workspace().focused_window;
+                if let Some(f_id) = focused_id {
+                    if let Some(gid) = state.windows.get(&f_id).and_then(|w| w.group_id) {
+                        let active_ws = state.active_workspace().clone();
+                        let group_windows: Vec<WindowId> = active_ws
+                            .windows
+                            .into_iter()
+                            .filter(|wid| {
+                                state
+                                    .windows
+                                    .get(wid)
+                                    .and_then(|w| w.group_id)
+                                    .map(|g| g == gid)
+                                    .unwrap_or(false)
+                            })
+                            .collect();
+                        if let Some(idx) = group_windows.iter().position(|&wid| wid == f_id) {
+                            let next_idx = (idx + 1) % group_windows.len();
+                            let _ = state.focus_window(group_windows[next_idx]);
+                        }
+                    }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::GroupPrev => {
+                let focused_id = state.active_workspace().focused_window;
+                if let Some(f_id) = focused_id {
+                    if let Some(gid) = state.windows.get(&f_id).and_then(|w| w.group_id) {
+                        let active_ws = state.active_workspace().clone();
+                        let group_windows: Vec<WindowId> = active_ws
+                            .windows
+                            .into_iter()
+                            .filter(|wid| {
+                                state
+                                    .windows
+                                    .get(wid)
+                                    .and_then(|w| w.group_id)
+                                    .map(|g| g == gid)
+                                    .unwrap_or(false)
+                            })
+                            .collect();
+                        if let Some(idx) = group_windows.iter().position(|&wid| wid == f_id) {
+                            let prev_idx = if idx == 0 {
+                                group_windows.len() - 1
+                            } else {
+                                idx - 1
+                            };
+                            let _ = state.focus_window(group_windows[prev_idx]);
+                        }
+                    }
                 }
                 Ok(DispatchResult::Ok)
             }
