@@ -11,12 +11,29 @@ pub struct WindowRuleMatcher {
     pub title: Option<String>,
 }
 
+fn matches_pattern(candidate: &str, pattern: &str) -> bool {
+    let cand_lower = candidate.to_lowercase();
+    let pat = pattern
+        .trim_start_matches('^')
+        .trim_end_matches('$')
+        .trim_start_matches('(')
+        .trim_end_matches(')');
+    if pat.contains('|') {
+        pat.split('|').any(|part| {
+            let p = part.trim();
+            !p.is_empty() && cand_lower.contains(&p.to_lowercase())
+        })
+    } else {
+        cand_lower.contains(&pat.to_lowercase())
+    }
+}
+
 impl WindowRuleMatcher {
     pub fn matches(&self, window: &Window) -> bool {
         if let Some(ref req_app_id) = self.app_id {
             match &window.app_id {
                 Some(app_id) => {
-                    if !app_id.to_lowercase().contains(&req_app_id.to_lowercase()) {
+                    if !matches_pattern(app_id, req_app_id) {
                         return false;
                     }
                 }
@@ -27,7 +44,7 @@ impl WindowRuleMatcher {
         if let Some(ref req_title) = self.title {
             match &window.title {
                 Some(title) => {
-                    if !title.to_lowercase().contains(&req_title.to_lowercase()) {
+                    if !matches_pattern(title, req_title) {
                         return false;
                     }
                 }
@@ -48,6 +65,8 @@ pub struct WindowRuleAction {
     pub open_on_workspace: Option<u32>,
     /// Force window to open fullscreen
     pub open_fullscreen: Option<bool>,
+    /// Automatically center floating window on screen
+    pub center: Option<bool>,
 }
 
 /// A complete window rule with a matcher and corresponding actions.
@@ -82,6 +101,9 @@ impl WindowRule {
             }
             if let Some(fs) = self.action.open_fullscreen {
                 window.fullscreen = fs;
+            }
+            if let Some(center) = self.action.center {
+                window.center = center;
             }
             true
         } else {

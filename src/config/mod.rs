@@ -124,19 +124,32 @@ impl LuaConfig {
         )?;
         truss.set("on", on_fn)?;
 
-        // Helper: truss.window_rule(name, rule_table)
+        // Helper: truss.window_rule(name, rule_table) or truss.window_rule(rule_table)
         let lua_for_rules = self.lua.clone();
-        let rule_fn =
-            self.lua
-                .create_function(move |_, (name, rule_table): (String, mlua::Table)| {
-                    let rules: mlua::Table = lua_for_rules.named_registry_value("_truss_rules")?;
-                    let len = rules.raw_len();
-                    let entry = lua_for_rules.create_table()?;
+        let rule_fn = self.lua.create_function(move |_, args: mlua::MultiValue| {
+            let rules: mlua::Table = lua_for_rules.named_registry_value("_truss_rules")?;
+            let len = rules.raw_len();
+            let entry = lua_for_rules.create_table()?;
+
+            let mut iter = args.into_iter();
+            match (iter.next(), iter.next()) {
+                (Some(mlua::Value::String(name)), Some(mlua::Value::Table(rule_table))) => {
+                    entry.set("name", name.to_str()?.to_string())?;
+                    entry.set("rule", rule_table)?;
+                }
+                (Some(mlua::Value::Table(rule_table)), _) => {
+                    let name = rule_table
+                        .get::<String>("name")
+                        .unwrap_or_else(|_| "unnamed".into());
                     entry.set("name", name)?;
                     entry.set("rule", rule_table)?;
-                    rules.set(len + 1, entry)?;
-                    Ok(())
-                })?;
+                }
+                _ => return Ok(()),
+            }
+
+            rules.set(len + 1, entry)?;
+            Ok(())
+        })?;
         truss.set("window_rule", rule_fn)?;
 
         // Helper: truss.keybind(mods, key, action) - register a keybinding
@@ -325,22 +338,49 @@ impl LuaConfig {
                 let name: String = entry.get("name").unwrap_or_else(|_| "unnamed".into());
                 if let Ok(rule_table) = entry.get::<mlua::Table>("rule") {
                     let mut matcher = WindowRuleMatcher::default();
-                    if let Ok(app_id) = rule_table.get::<String>("app_id") {
+
+                    // Match criteria may be nested under match = { ... } or at top-level
+                    let match_tbl = rule_table.get::<mlua::Table>("match").ok();
+                    let lookup_str = |key: &str| -> Option<String> {
+                        if let Some(ref m) = match_tbl {
+                            if let Ok(val) = m.get::<String>(key) {
+                                return Some(val);
+                            }
+                        }
+                        rule_table.get::<String>(key).ok()
+                    };
+
+                    if let Some(app_id) = lookup_str("app_id").or_else(|| lookup_str("class")) {
                         matcher.app_id = Some(app_id);
                     }
-                    if let Ok(title) = rule_table.get::<String>("title") {
+                    if let Some(title) = lookup_str("title") {
                         matcher.title = Some(title);
                     }
 
                     let mut action = WindowRuleAction::default();
-                    if let Ok(floating) = rule_table.get::<bool>("floating") {
+                    let float_val = match rule_table.get::<mlua::Value>("floating") {
+                        Ok(mlua::Value::Boolean(b)) => Some(b),
+                        _ => match rule_table.get::<mlua::Value>("float") {
+                            Ok(mlua::Value::Boolean(b)) => Some(b),
+                            _ => None,
+                        },
+                    };
+                    if let Some(floating) = float_val {
                         action.open_floating = Some(floating);
                     }
-                    if let Ok(ws) = rule_table.get::<u32>("workspace") {
-                        action.open_on_workspace = Some(ws);
+                    if let Ok(mlua::Value::Integer(ws)) = rule_table.get::<mlua::Value>("workspace")
+                    {
+                        action.open_on_workspace = Some(ws as u32);
                     }
-                    if let Ok(fs) = rule_table.get::<bool>("fullscreen") {
+                    if let Ok(mlua::Value::Boolean(fs)) =
+                        rule_table.get::<mlua::Value>("fullscreen")
+                    {
                         action.open_fullscreen = Some(fs);
+                    }
+                    if let Ok(mlua::Value::Boolean(center)) =
+                        rule_table.get::<mlua::Value>("center")
+                    {
+                        action.center = Some(center);
                     }
 
                     manager.add_rule(WindowRule::new(name, matcher, action));

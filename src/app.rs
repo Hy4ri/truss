@@ -317,6 +317,29 @@ impl App {
             self.window_rules.evaluate_and_apply(window);
         }
 
+        // If window is floating and requested center = true, center it on usable area
+        let usable_area = self.output_manager.primary_usable_area();
+        if let Some(window) = self.state.windows.get_mut(&window_id) {
+            if window.floating && window.center {
+                let win_w = if window.geometry.width > 0 {
+                    window.geometry.width
+                } else {
+                    600
+                };
+                let win_h = if window.geometry.height > 0 {
+                    window.geometry.height
+                } else {
+                    400
+                };
+                window.geometry.width = win_w;
+                window.geometry.height = win_h;
+                window.geometry.x =
+                    usable_area.x + ((usable_area.width as i32 - win_w as i32) / 2).max(0);
+                window.geometry.y =
+                    usable_area.y + ((usable_area.height as i32 - win_h as i32) / 2).max(0);
+            }
+        }
+
         let requested_workspace = match self.state.windows.get(&window_id) {
             Some(window) => window.workspace_id,
             None => return,

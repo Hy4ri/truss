@@ -144,6 +144,25 @@ truss.set("repeat_delay", 200)   -- key repeat delay in ms
 truss.set("numlock_by_default", true) -- activate NumLock on start
 ```
 
+### Window Rules
+Declarative window placement and layout rules:
+```lua
+-- Hyprland-style syntax:
+truss.window_rule({
+    match = { class = "(pavucontrol|qalculate-gtk)" },
+    float = true,
+    center = true,
+})
+
+-- Named rule syntax:
+truss.window_rule("audio-mixer", {
+    app_id = "pavucontrol",
+    floating = true,
+    center = true,
+    workspace = 4,
+})
+```
+
 ### Keybindings
 
 ```lua
