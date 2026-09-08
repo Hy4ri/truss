@@ -186,6 +186,41 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
+            Command::WorkspaceNext => {
+                if let Some(next_id) = state.next_workspace_id() {
+                    let prev_id = state.active_workspace_id;
+                    state.switch_workspace(next_id)?;
+                    if prev_id != next_id {
+                        self.broadcast(&Event::WorkspaceSwitched { id: next_id });
+                    }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WorkspacePrev => {
+                if let Some(prev_id) = state.prev_workspace_id() {
+                    let current_id = state.active_workspace_id;
+                    state.switch_workspace(prev_id)?;
+                    if current_id != prev_id {
+                        self.broadcast(&Event::WorkspaceSwitched { id: prev_id });
+                    }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WorkspacePrevious => {
+                if let Some(prev_id) = state.previous_workspace_id {
+                    if state.workspaces.contains_key(&prev_id) {
+                        let current_id = state.active_workspace_id;
+                        state.switch_workspace(prev_id)?;
+                        if current_id != prev_id {
+                            self.broadcast(&Event::WorkspaceSwitched { id: prev_id });
+                        }
+                    }
+                }
+                Ok(DispatchResult::Ok)
+            }
+
             Command::WindowFocus { id } => {
                 state.focus_window(id)?;
                 self.broadcast(&Event::WindowFocused { id });
@@ -200,7 +235,16 @@ impl Dispatcher {
                 };
 
                 if let Some(id) = focused {
+                    state.record_focus(id);
                     self.broadcast(&Event::WindowFocused { id });
+                }
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowFocusLast => {
+                if let Some(last_id) = state.last_focused_window(None) {
+                    state.focus_window(last_id)?;
+                    self.broadcast(&Event::WindowFocused { id: last_id });
                 }
                 Ok(DispatchResult::Ok)
             }
@@ -209,7 +253,9 @@ impl Dispatcher {
                 let ws = state.active_workspace_mut();
                 if ws.swap_focused_with_master() {
                     if let Some(master_id) = ws.windows.first() {
-                        self.broadcast(&Event::WindowFocused { id: *master_id });
+                        let id = *master_id;
+                        state.record_focus(id);
+                        self.broadcast(&Event::WindowFocused { id });
                     }
                 }
                 Ok(DispatchResult::Ok)

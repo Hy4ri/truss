@@ -130,4 +130,104 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_workspace_cycling_next_and_prev() {
+        let mut state = State::new();
+        let mut dispatcher = Dispatcher::new();
+
+        assert_eq!(state.active_workspace_id, 1);
+
+        // Cycle next: 1 -> 2
+        dispatcher
+            .dispatch(&mut state, Command::WorkspaceNext)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 2);
+
+        // Cycle prev: 2 -> 1
+        dispatcher
+            .dispatch(&mut state, Command::WorkspacePrev)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 1);
+
+        // Wrap around backward: 1 -> 9
+        dispatcher
+            .dispatch(&mut state, Command::WorkspacePrev)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 9);
+
+        // Wrap around forward: 9 -> 1
+        dispatcher
+            .dispatch(&mut state, Command::WorkspaceNext)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 1);
+    }
+
+    #[test]
+    fn test_workspace_previous_history_toggle() {
+        let mut state = State::new();
+        let mut dispatcher = Dispatcher::new();
+
+        assert_eq!(state.active_workspace_id, 1);
+        assert_eq!(state.previous_workspace_id, None);
+
+        // Switch 1 -> 4
+        dispatcher
+            .dispatch(&mut state, Command::WorkspaceSwitch { id: 4 })
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 4);
+        assert_eq!(state.previous_workspace_id, Some(1));
+
+        // Switch to previous (back-and-forth): 4 -> 1
+        dispatcher
+            .dispatch(&mut state, Command::WorkspacePrevious)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 1);
+        assert_eq!(state.previous_workspace_id, Some(4));
+
+        // Switch to previous again: 1 -> 4
+        dispatcher
+            .dispatch(&mut state, Command::WorkspacePrevious)
+            .unwrap();
+        assert_eq!(state.active_workspace_id, 4);
+        assert_eq!(state.previous_workspace_id, Some(1));
+    }
+
+    #[test]
+    fn test_window_focus_last_history_toggle() {
+        let mut state = State::new();
+        let mut dispatcher = Dispatcher::new();
+
+        let w1 = state.create_window(Some(1)).unwrap();
+        let w2 = state.create_window(Some(1)).unwrap();
+
+        // Focus w1 explicitly
+        dispatcher
+            .dispatch(&mut state, Command::WindowFocus { id: w1 })
+            .unwrap();
+        assert_eq!(state.active_workspace().focused_window, Some(w1));
+
+        // Focus w2 explicitly
+        dispatcher
+            .dispatch(&mut state, Command::WindowFocus { id: w2 })
+            .unwrap();
+        assert_eq!(state.active_workspace().focused_window, Some(w2));
+
+        // Focus last active window: w2 -> w1
+        dispatcher
+            .dispatch(&mut state, Command::WindowFocusLast)
+            .unwrap();
+        assert_eq!(state.active_workspace().focused_window, Some(w1));
+
+        // Focus last active window again: w1 -> w2
+        dispatcher
+            .dispatch(&mut state, Command::WindowFocusLast)
+            .unwrap();
+        assert_eq!(state.active_workspace().focused_window, Some(w2));
+
+        // Destroying w1 cleans up history
+        state.remove_window(w1).unwrap();
+        assert!(!state.focus_history.contains(&w1));
+        assert_eq!(state.last_focused_window(Some(1)), None);
+    }
 }

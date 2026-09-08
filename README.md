@@ -158,6 +158,10 @@ truss.keybind("SUPER", "v", "kitty") -- a plain string spawns a shell command
 | Constructor | Description |
 | :--- | :--- |
 | `truss.cmd.workspace_switch(id)` | Switch to workspace `id` |
+| `truss.cmd.workspace_next()` | Switch to the next workspace in cycle |
+| `truss.cmd.workspace_prev()` | Switch to the previous workspace in cycle |
+| `truss.cmd.workspace_previous()` | Switch back-and-forth to previous active workspace |
+| `truss.cmd.focus_last_window()` | Focus the last active window on workspace (Alt+Tab) |
 | `truss.cmd.window_focus_dir("next" \| "prev")` | Focus next or previous window in the layout |
 | `truss.cmd.swap_master()` | Swap the focused window with the master |
 | `truss.cmd.close_window([id])` | Close the focused window (or the window with id `id`) |
