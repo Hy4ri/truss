@@ -35,6 +35,7 @@ pub struct Window {
     pub floating: bool,
     pub fullscreen: bool,
     pub maximized: bool,
+    pub saved_geometry: Option<Rect>,
 }
 
 impl Window {
@@ -48,6 +49,7 @@ impl Window {
             floating: false,
             fullscreen: false,
             maximized: false,
+            saved_geometry: None,
         }
     }
 }

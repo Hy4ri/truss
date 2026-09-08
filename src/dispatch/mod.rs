@@ -145,6 +145,9 @@ impl Dispatcher {
             for &win_id in &ws.windows {
                 if let Some(w) = state.windows.get_mut(&win_id) {
                     if w.maximized && !w.fullscreen {
+                        if w.saved_geometry.is_none() {
+                            w.saved_geometry = Some(w.geometry);
+                        }
                         w.geometry = usable_area;
                     }
                 }
@@ -156,6 +159,9 @@ impl Dispatcher {
             for &win_id in &ws.windows {
                 if let Some(w) = state.windows.get_mut(&win_id) {
                     if w.fullscreen {
+                        if w.saved_geometry.is_none() {
+                            w.saved_geometry = Some(w.geometry);
+                        }
                         w.geometry = full_area;
                     }
                 }
