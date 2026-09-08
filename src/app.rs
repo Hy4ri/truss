@@ -533,6 +533,7 @@ impl App {
         for output in &self.output_manager.outputs {
             self.output_manager.apply_monitor_config_to_output(output);
         }
+        self.lua_config.apply_workspace_rules(&mut self.state);
         self.keybindings.clear();
         self.lua_config.apply_keybindings(&mut self.keybindings);
         self.lua_config.apply_settings(
@@ -620,9 +621,10 @@ impl App {
         // Prune expired sync transactions
         self.transaction_manager.prune_expired();
 
-        let area = self.output_manager.primary_usable_area();
-        let full_area = self.output_manager.primary_full_area();
         let active_ws = self.state.active_workspace_id;
+        let ws_output = self.state.active_workspace().output.clone();
+        let area = self.output_manager.output_usable_area(ws_output.as_deref());
+        let full_area = self.output_manager.output_full_area(ws_output.as_deref());
         self.dispatcher.recalculate_workspace_layout_with_full_area(
             &mut self.state,
             active_ws,

@@ -166,6 +166,23 @@ impl LuaConfig {
         })?;
         truss.set("monitor", monitor_fn)?;
 
+        let ws_rules = self.lua.create_table()?;
+        self.lua
+            .set_named_registry_value("_truss_ws_rules", ws_rules)?;
+
+        // Helper: truss.workspace_rule(table) - register workspace affinity
+        let lua_for_ws_rules = self.lua.clone();
+        let ws_rule_fn = self
+            .lua
+            .create_function(move |_, ws_rule_table: mlua::Table| {
+                let ws_rules: mlua::Table =
+                    lua_for_ws_rules.named_registry_value("_truss_ws_rules")?;
+                let len = ws_rules.raw_len();
+                ws_rules.set(len + 1, ws_rule_table)?;
+                Ok(())
+            })?;
+        truss.set("workspace_rule", ws_rule_fn)?;
+
         // Helper: truss.keybind(mods, key, action) - register a keybinding
         let lua_for_keybinds = self.lua.clone();
         let keybind_fn = self.lua.create_function(
@@ -254,6 +271,18 @@ impl LuaConfig {
             lua.to_value(&cmd)
         })?;
         cmd_table.set("dpms_toggle", dpms_toggle)?;
+
+        let move_ws_mon =
+            self.lua
+                .create_function(|lua, (monitor, ws_id): (String, Option<u32>)| {
+                    let cmd = Command::WorkspaceMoveToMonitor {
+                        workspace_id: ws_id,
+                        monitor,
+                    };
+                    lua.to_value(&cmd)
+                })?;
+        cmd_table.set("move_workspace_to_monitor", move_ws_mon.clone())?;
+        cmd_table.set("workspace_move_to_monitor", move_ws_mon)?;
 
         let focus_last_win = self.lua.create_function(|lua, ()| {
             let cmd = Command::WindowFocusLast;
@@ -405,6 +434,25 @@ impl LuaConfig {
                         position,
                         scale,
                     });
+                }
+            }
+        }
+    }
+
+    /// Extract registered workspace rules into State
+    pub fn apply_workspace_rules(&self, state: &mut crate::state::State) {
+        if let Ok(ws_rules) = self
+            .lua
+            .named_registry_value::<mlua::Table>("_truss_ws_rules")
+        {
+            for (_, rule_table) in ws_rules.pairs::<mlua::Value, mlua::Table>().flatten() {
+                if let (Ok(ws_id), Ok(monitor)) = (
+                    rule_table.get::<u32>("workspace"),
+                    rule_table.get::<String>("monitor"),
+                ) {
+                    if let Some(ws) = state.workspaces.get_mut(&ws_id) {
+                        ws.output = Some(monitor);
+                    }
                 }
             }
         }

@@ -151,28 +151,46 @@ impl OutputManager {
         self.outputs.len() < prev_len
     }
 
-    /// Gets the primary output's full display geometry (including areas covered by panels/bars).
-    pub fn primary_full_area(&self) -> Rect {
-        if let Some(output) = self.outputs.first() {
+    /// Gets an output's full display geometry by name, or primary if None/not found.
+    pub fn output_full_area(&self, name: Option<&str>) -> Rect {
+        let output = name
+            .and_then(|n| self.find_output_by_name(n))
+            .or_else(|| self.outputs.first());
+        if let Some(output) = output {
             if let Some(mode) = output.current_mode() {
-                return Rect::new(0, 0, mode.size.w as u32, mode.size.h as u32);
+                let loc = output.current_location();
+                return Rect::new(loc.x, loc.y, mode.size.w as u32, mode.size.h as u32);
             }
         }
         Rect::new(0, 0, 1920, 1080)
     }
 
-    /// Gets the primary output's usable geometry (excluding panels/bars with exclusive zones).
-    pub fn primary_usable_area(&self) -> Rect {
-        if let Some(output) = self.outputs.first() {
+    /// Gets an output's usable geometry by name, or primary if None/not found.
+    pub fn output_usable_area(&self, name: Option<&str>) -> Rect {
+        let output = name
+            .and_then(|n| self.find_output_by_name(n))
+            .or_else(|| self.outputs.first());
+        if let Some(output) = output {
             let layer_map = smithay::desktop::layer_map_for_output(output);
             let non_exclusive = layer_map.non_exclusive_zone();
+            let loc = output.current_location();
             return Rect::new(
-                non_exclusive.loc.x,
-                non_exclusive.loc.y,
+                loc.x + non_exclusive.loc.x,
+                loc.y + non_exclusive.loc.y,
                 non_exclusive.size.w as u32,
                 non_exclusive.size.h as u32,
             );
         }
         Rect::new(0, 0, 1920, 1080)
+    }
+
+    /// Gets the primary output's full display geometry (including areas covered by panels/bars).
+    pub fn primary_full_area(&self) -> Rect {
+        self.output_full_area(None)
+    }
+
+    /// Gets the primary output's usable geometry (excluding panels/bars with exclusive zones).
+    pub fn primary_usable_area(&self) -> Rect {
+        self.output_usable_area(None)
     }
 }

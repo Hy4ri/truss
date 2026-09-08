@@ -72,6 +72,8 @@ truss.keybind("SUPER", "equal", truss.cmd.zoom_change(0.1))
 truss.keybind("SUPER", "minus", truss.cmd.zoom_change(-0.1))
 truss.keybind("SUPER", "0", truss.cmd.zoom_reset())
 truss.keybind("SUPER+SHIFT", "p", truss.cmd.dpms_toggle())
+truss.keybind("SUPER+ALT", "1", truss.cmd.move_workspace_to_monitor("eDP-1"))
+truss.keybind("SUPER+ALT", "2", truss.cmd.move_workspace_to_monitor("HDMI-A-1"))
 for ws = 1, 9 do
     truss.keybind("SUPER", tostring(ws), truss.cmd.workspace_switch(ws))
     truss.keybind("SUPER+SHIFT", tostring(ws), truss.cmd.move_to_workspace(ws))

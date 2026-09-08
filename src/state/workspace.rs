@@ -10,6 +10,7 @@ pub struct Workspace {
     pub layout: String,
     pub windows: Vec<WindowId>,
     pub focused_window: Option<WindowId>,
+    pub output: Option<String>,
 }
 
 impl Workspace {
@@ -20,6 +21,7 @@ impl Workspace {
             layout: layout.into(),
             windows: Vec::new(),
             focused_window: None,
+            output: None,
         }
     }
 

@@ -33,6 +33,12 @@ pub enum Command {
     #[serde(rename = "output.dpms_toggle")]
     DpmsToggle,
 
+    #[serde(rename = "workspace.move_to_monitor")]
+    WorkspaceMoveToMonitor {
+        workspace_id: Option<u32>,
+        monitor: String,
+    },
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 

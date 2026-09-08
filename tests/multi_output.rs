@@ -82,3 +82,44 @@ fn test_declarative_monitor_configuration() {
         smithay::output::Scale::Fractional(s) if (s - 1.25).abs() < f64::EPSILON
     ));
 }
+
+#[test]
+fn test_workspace_output_binding_and_move() {
+    let cfg = truss::config::LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.workspace_rule({ workspace = 1, monitor = "eDP-1" })
+        truss.workspace_rule({ workspace = 2, monitor = "HDMI-A-1" })
+        truss.keybind("SUPER+ALT", "1", truss.cmd.move_workspace_to_monitor("eDP-1"))
+    "#,
+    )
+    .unwrap();
+
+    let mut state = truss::State::new();
+    cfg.apply_workspace_rules(&mut state);
+
+    assert_eq!(
+        state.workspaces.get(&1).unwrap().output.as_deref(),
+        Some("eDP-1")
+    );
+    assert_eq!(
+        state.workspaces.get(&2).unwrap().output.as_deref(),
+        Some("HDMI-A-1")
+    );
+
+    let mut dispatcher = truss::Dispatcher::new();
+    dispatcher
+        .dispatch(
+            &mut state,
+            truss::dispatch::Command::WorkspaceMoveToMonitor {
+                workspace_id: Some(1),
+                monitor: "HDMI-A-1".into(),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        state.workspaces.get(&1).unwrap().output.as_deref(),
+        Some("HDMI-A-1")
+    );
+}
