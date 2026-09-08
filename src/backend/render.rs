@@ -297,9 +297,23 @@ pub fn collect_render_elements(
     }
 
     // 5. Tiled Windows (In layout master/stack order)
+    // If windows share a group_id, only render the active/focused one (or the first one)
+    let mut group_rendered = std::collections::HashSet::new();
     for &window_id in &visible_window_ids {
         if let Some(win) = app.state.windows.get(&window_id) {
             if !win.floating && !win.fullscreen {
+                if let Some(gid) = win.group_id {
+                    let is_active = Some(window_id) == app.state.active_workspace().focused_window;
+                    if is_active {
+                        group_rendered.insert(gid);
+                        render_window_tree(&mut elements, renderer, window_id);
+                        continue;
+                    }
+                    if group_rendered.contains(&gid) {
+                        continue;
+                    }
+                    group_rendered.insert(gid);
+                }
                 render_window_tree(&mut elements, renderer, window_id);
             }
         }
