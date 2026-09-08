@@ -1,5 +1,5 @@
 use truss::state::{
-    Window, WindowId, WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher,
+    State, Window, WindowId, WindowRule, WindowRuleAction, WindowRuleManager, WindowRuleMatcher,
 };
 use truss::LuaConfig;
 
@@ -18,6 +18,7 @@ fn test_window_rule_matching_and_apply() {
         open_on_workspace: Some(5),
         open_fullscreen: None,
         center: None,
+        pin: None,
     };
 
     let rule = WindowRule::new("float-audio", matcher, action);
@@ -74,4 +75,37 @@ fn test_window_rule_center_and_syntax() {
 
     assert!(win.floating);
     assert!(win.center);
+}
+
+#[test]
+fn test_window_rule_pin_and_toggle_cmd() {
+    let cfg = LuaConfig::new().expect("Failed to initialize LuaConfig");
+    cfg.load_string(
+        r#"
+        truss.window_rule({
+            match = { title = "Picture-in-Picture" },
+            pin = true,
+            float = true,
+        })
+    "#,
+    )
+    .expect("Failed to load lua rule");
+
+    let mut manager = WindowRuleManager::new();
+    cfg.apply_rules_to_manager(&mut manager);
+
+    let mut win = Window::new(WindowId(33), 1);
+    win.title = Some("Picture-in-Picture".into());
+    manager.evaluate_and_apply(&mut win);
+
+    assert!(win.pinned);
+    assert!(win.floating);
+
+    let mut state = State::new();
+    let w_id = state.create_window(None).unwrap();
+    assert!(!state.windows.get(&w_id).unwrap().pinned);
+    state.toggle_pinned(w_id).unwrap();
+    assert!(state.windows.get(&w_id).unwrap().pinned);
+    state.toggle_pinned(w_id).unwrap();
+    assert!(!state.windows.get(&w_id).unwrap().pinned);
 }

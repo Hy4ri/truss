@@ -67,6 +67,8 @@ pub struct WindowRuleAction {
     pub open_fullscreen: Option<bool>,
     /// Automatically center floating window on screen
     pub center: Option<bool>,
+    /// Pin window across all workspaces (sticky)
+    pub pin: Option<bool>,
 }
 
 /// A complete window rule with a matcher and corresponding actions.
@@ -104,6 +106,9 @@ impl WindowRule {
             }
             if let Some(center) = self.action.center {
                 window.center = center;
+            }
+            if let Some(pin) = self.action.pin {
+                window.pinned = pin;
             }
             true
         } else {

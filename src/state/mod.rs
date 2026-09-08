@@ -239,6 +239,15 @@ impl State {
         Ok(window.floating)
     }
 
+    pub fn toggle_pinned(&mut self, id: WindowId) -> Result<bool, StateError> {
+        let window = self
+            .windows
+            .get_mut(&id)
+            .ok_or(StateError::WindowNotFound(id))?;
+        window.pinned = !window.pinned;
+        Ok(window.pinned)
+    }
+
     pub fn toggle_fullscreen(&mut self, id: WindowId) -> Result<bool, StateError> {
         let window = self
             .windows

@@ -278,6 +278,15 @@ impl LuaConfig {
         })?;
         cmd_table.set("toggle_floating", toggle_float)?;
 
+        let toggle_pin = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowTogglePin {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("toggle_pin", toggle_pin.clone())?;
+        cmd_table.set("pin", toggle_pin)?;
+
         let toggle_fs = self.lua.create_function(|lua, id: Option<u64>| {
             let cmd = Command::WindowToggleFullscreen {
                 id: id.map(WindowId),
@@ -381,6 +390,9 @@ impl LuaConfig {
                         rule_table.get::<mlua::Value>("center")
                     {
                         action.center = Some(center);
+                    }
+                    if let Ok(mlua::Value::Boolean(pin)) = rule_table.get::<mlua::Value>("pin") {
+                        action.pin = Some(pin);
                     }
 
                     manager.add_rule(WindowRule::new(name, matcher, action));

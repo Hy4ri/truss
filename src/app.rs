@@ -538,7 +538,7 @@ impl App {
         let mut resized: Vec<crate::state::WindowId> = Vec::new();
         for (&id, surface) in &self.surfaces {
             if let Some(win) = self.state.windows.get(&id) {
-                let is_on_active_ws = win.workspace_id == active_ws;
+                let is_on_active_ws = win.workspace_id == active_ws || win.pinned;
                 let is_active = is_on_active_ws && Some(id) == focused;
 
                 let mut size_changed = false;

@@ -125,6 +125,7 @@ IPC COMMANDS:
     truss msg close-window [ID]          Close target/focused window
     truss msg force-kill-window [ID]     Force kill target/focused window process (SIGKILL)
     truss msg toggle-floating [ID]       Toggle floating mode
+    truss msg toggle-pin [ID]            Toggle pinned mode (sticky across workspaces)
     truss msg toggle-fullscreen [ID]     Toggle fullscreen mode
     truss msg move-to-workspace <WS> [W] Move window to workspace (and follow)
     truss msg move-to-workspace-silent <WS> [W] Move window to workspace (stay on current)
@@ -193,6 +194,13 @@ pub fn handle_msg_command(
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(WindowId);
             Command::WindowToggleFloating { id }
+        }
+        "toggle-pin" | "pin" => {
+            let id = args
+                .get(1)
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(WindowId);
+            Command::WindowTogglePin { id }
         }
         "toggle-fullscreen" => {
             let id = args

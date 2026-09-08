@@ -39,6 +39,9 @@ pub enum Command {
     #[serde(rename = "window.toggle_floating")]
     WindowToggleFloating { id: Option<WindowId> },
 
+    #[serde(rename = "window.toggle_pin")]
+    WindowTogglePin { id: Option<WindowId> },
+
     #[serde(rename = "window.toggle_fullscreen")]
     WindowToggleFullscreen { id: Option<WindowId> },
 
