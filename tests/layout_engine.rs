@@ -9,6 +9,7 @@ fn test_master_layout_single_window() {
         gap: 10,
         master_ratio: 0.5,
         master_count: 1,
+        smart_gaps: false,
     };
     let usable_area = Rect::new(0, 0, 1920, 1080);
     let windows = vec![WindowId(1)];
@@ -17,6 +18,16 @@ fn test_master_layout_single_window() {
     assert_eq!(res.len(), 1);
     assert_eq!(res[0].0, WindowId(1));
     assert_eq!(res[0].1, Rect::new(10, 10, 1900, 1060));
+
+    // Smart gaps test: gap is 0 when 1 window
+    let smart_config = LayoutConfig {
+        gap: 10,
+        master_ratio: 0.5,
+        master_count: 1,
+        smart_gaps: true,
+    };
+    let smart_res = layout.arrange(&windows, usable_area, &smart_config);
+    assert_eq!(smart_res[0].1, Rect::new(0, 0, 1920, 1080));
 }
 
 #[test]
@@ -26,6 +37,7 @@ fn test_master_layout_two_windows() {
         gap: 10,
         master_ratio: 0.5,
         master_count: 1,
+        smart_gaps: false,
     };
     let usable_area = Rect::new(0, 0, 1920, 1080);
     let windows = vec![WindowId(1), WindowId(2)];
@@ -50,6 +62,7 @@ fn test_master_layout_three_windows_stack() {
         gap: 10,
         master_ratio: 0.6,
         master_count: 1,
+        smart_gaps: false,
     };
     let usable_area = Rect::new(0, 0, 1000, 1000);
     let windows = vec![WindowId(1), WindowId(2), WindowId(3)];
@@ -78,6 +91,7 @@ fn test_monocle_layout() {
         gap: 8,
         master_ratio: 0.5,
         master_count: 1,
+        smart_gaps: false,
     };
     let usable_area = Rect::new(0, 0, 1920, 1080);
     let windows = vec![WindowId(1), WindowId(2)];
@@ -86,6 +100,17 @@ fn test_monocle_layout() {
     assert_eq!(res.len(), 2);
     assert_eq!(res[0].1, Rect::new(8, 8, 1904, 1064));
     assert_eq!(res[1].1, Rect::new(8, 8, 1904, 1064));
+
+    // Smart gaps test with 1 window in Monocle
+    let single = vec![WindowId(1)];
+    let smart_cfg = LayoutConfig {
+        gap: 8,
+        master_ratio: 0.5,
+        master_count: 1,
+        smart_gaps: true,
+    };
+    let smart_res = layout.arrange(&single, usable_area, &smart_cfg);
+    assert_eq!(smart_res[0].1, Rect::new(0, 0, 1920, 1080));
 }
 
 #[test]

@@ -456,6 +456,16 @@ impl LuaConfig {
                     Ok(w) => border_config.width = w,
                     Err(e) => warn!("truss: invalid border_width setting: {e}"),
                 },
+                "smart_borders" | "border.smart" => match self.lua.from_value::<bool>(value) {
+                    Ok(b) => border_config.smart_borders = b,
+                    Err(e) => warn!("truss: invalid smart_borders setting: {e}"),
+                },
+                "smart_gaps" | "gaps.smart" | "no_gaps_when_only" => {
+                    match self.lua.from_value::<bool>(value) {
+                        Ok(b) => dispatcher.layout_config.smart_gaps = b,
+                        Err(e) => warn!("truss: invalid smart_gaps setting: {e}"),
+                    }
+                }
                 "active_border_color" | "border.active" | "border.active_color" => {
                     match self.lua.from_value::<String>(value) {
                         Ok(s) => match parse_hex_color(&s) {

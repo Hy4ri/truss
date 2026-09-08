@@ -14,6 +14,8 @@ pub struct LayoutConfig {
     pub master_ratio: f32,
     /// Number of master windows (typically 1).
     pub master_count: u32,
+    /// Smart gaps: disable gaps when only 1 tiled window is present.
+    pub smart_gaps: bool,
 }
 
 impl Default for LayoutConfig {
@@ -22,6 +24,7 @@ impl Default for LayoutConfig {
             gap: 8,
             master_ratio: 0.55,
             master_count: 1,
+            smart_gaps: false,
         }
     }
 }

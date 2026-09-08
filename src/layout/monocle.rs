@@ -22,7 +22,11 @@ impl Layout for MonocleLayout {
             return Vec::new();
         }
 
-        let gap = config.gap as i32;
+        let gap = if windows.len() == 1 && config.smart_gaps {
+            0
+        } else {
+            config.gap as i32
+        };
         let width = (usable_area.width as i32 - 2 * gap).max(1) as u32;
         let height = (usable_area.height as i32 - 2 * gap).max(1) as u32;
         let rect = Rect::new(usable_area.x + gap, usable_area.y + gap, width, height);
