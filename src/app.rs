@@ -37,6 +37,13 @@ use crate::{
 };
 
 /// Configuration for window borders
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FocusMode {
+    #[default]
+    Click,
+    FollowMouse,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BorderConfig {
     pub width: u32,
@@ -75,6 +82,7 @@ pub struct App {
     pub window_rules: WindowRuleManager,
     pub bg_color: smithay::backend::renderer::Color32F,
     pub border_config: BorderConfig,
+    pub focus_mode: FocusMode,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
@@ -169,6 +177,7 @@ impl App {
             window_rules,
             bg_color: DESKTOP_BG_COLOR,
             border_config: BorderConfig::default(),
+            focus_mode: FocusMode::default(),
             output_manager,
             render_manager,
             lua_config,
@@ -207,6 +216,52 @@ impl App {
         }
 
         self.refresh_layout_and_space();
+    }
+
+    /// Update window focus on pointer motion if `focus_mode == FocusMode::FollowMouse`.
+    pub fn update_focus_on_pointer_motion(&mut self) {
+        if self.focus_mode != FocusMode::FollowMouse {
+            return;
+        }
+        if !matches!(
+            self.pointer_state.drag,
+            crate::input::pointer::PointerDragMode::None
+        ) {
+            return;
+        }
+
+        // If an interactive layer surface (like an open launcher) is under pointer, do not divert focus
+        let surface_under = self.surface_under(self.pointer_state.location);
+        let layer_wants_kb = surface_under
+            .as_ref()
+            .map(|(s, _)| {
+                smithay::wayland::compositor::with_states(s, |states| {
+                    let mut cached = states
+                        .cached_state
+                        .get::<smithay::wayland::shell::wlr_layer::LayerSurfaceCachedState>(
+                    );
+                    match cached.current().keyboard_interactivity {
+                        smithay::wayland::shell::wlr_layer::KeyboardInteractivity::Exclusive
+                        | smithay::wayland::shell::wlr_layer::KeyboardInteractivity::OnDemand => {
+                            true
+                        }
+                        smithay::wayland::shell::wlr_layer::KeyboardInteractivity::None => false,
+                    }
+                })
+            })
+            .unwrap_or(false);
+
+        if layer_wants_kb {
+            return;
+        }
+
+        let target = self.pointer_state.find_target_at_location(&self.state);
+        if let crate::input::pointer::PointerFocusTarget::Window(win_id) = target {
+            let current_focused = self.state.active_workspace().focused_window;
+            if current_focused != Some(win_id) {
+                self.set_focused_window(Some(win_id));
+            }
+        }
     }
 
     /// Apply matching rules and keep the state workspace indexes in sync.

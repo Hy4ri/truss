@@ -16,6 +16,8 @@ truss.set("bg_color", "#14141a")
 truss.set("border_width", 2)
 truss.set("active_border_color", "#80d5d2")
 truss.set("inactive_border_color", "#333333")
+-- Window focus mode: "click" (default) or "follow_mouse"
+truss.set("focus_mode", "click")
 
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings

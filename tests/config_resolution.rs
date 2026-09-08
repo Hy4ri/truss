@@ -145,6 +145,7 @@ fn test_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.focus_mode,
     );
 
     assert_eq!(app.dispatcher.layout_config.gap, 16);
@@ -174,6 +175,7 @@ fn test_border_settings_applied() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.focus_mode,
     );
 
     assert_eq!(app.border_config.width, 4);
@@ -199,6 +201,7 @@ fn test_invalid_setting_warns() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.focus_mode,
     );
 
     assert_eq!(app.dispatcher.layout_config.gap, 8);
@@ -298,6 +301,7 @@ fn test_parse_hex_color_unicode_safe() {
         &mut app.state,
         &mut app.bg_color,
         &mut app.border_config,
+        &mut app.focus_mode,
     );
 
     assert!((app.bg_color.r() - 0.08).abs() < 1e-6);
@@ -339,4 +343,54 @@ fn test_cli_nonexistent_path_still_resolves_file() {
         ConfigSource::Embedded => panic!("expected CLI file source"),
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_focus_mode_settings_applied() {
+    let _guard = APP_LOCK.lock().unwrap();
+
+    // 1. Enum string "follow_mouse"
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(r#"truss.set("focus_mode", "follow_mouse")"#)
+        .unwrap();
+    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
+    assert_eq!(app.focus_mode, truss::FocusMode::Click);
+
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+    );
+    assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
+
+    // 2. Boolean "focus_follow_mouse" = false
+    let cfg_bool = LuaConfig::new().unwrap();
+    cfg_bool
+        .load_string(r#"truss.set("focus_follow_mouse", false)"#)
+        .unwrap();
+    cfg_bool.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+    );
+    assert_eq!(app.focus_mode, truss::FocusMode::Click);
+
+    // 3. Boolean "focus_follow_mouse" = true
+    let cfg_bool_true = LuaConfig::new().unwrap();
+    cfg_bool_true
+        .load_string(r#"truss.set("focus_follow_mouse", true)"#)
+        .unwrap();
+    cfg_bool_true.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+    );
+    assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
 }
