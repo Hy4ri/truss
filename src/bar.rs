@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::thread;
@@ -17,6 +17,8 @@ pub fn run_status_bar(socket_name: &str) -> Result<(), Box<dyn std::error::Error
         socket_path
     );
 
+    let mut last_state: Option<State> = None;
+
     loop {
         match UnixStream::connect(&socket_path) {
             Ok(mut stream) => {
@@ -29,9 +31,6 @@ pub fn run_status_bar(socket_name: &str) -> Result<(), Box<dyn std::error::Error
 
                 let mut acc: Vec<u8> = Vec::new();
                 let mut chunk = [0u8; 1024];
-                // JSONL-safe read: a single read() may return a partial
-                // response or several buffered lines. Read until we have at
-                // least one full newline-terminated line.
                 loop {
                     match stream.read(&mut chunk) {
                         Ok(0) => break,
@@ -51,16 +50,48 @@ pub fn run_status_bar(socket_name: &str) -> Result<(), Box<dyn std::error::Error
                 if let Ok(resp) = serde_json::from_slice::<IpcResponse>(line) {
                     if let Some(crate::dispatch::DispatchResult::State(state)) = resp.result {
                         render_bar_line(&state);
+                        last_state = Some(state);
+                    }
+                }
+
+                // Keep stream and listen for streaming event updates instead of polling aggressively
+                let reader = std::io::BufReader::new(stream);
+                for l in reader.lines() {
+                    let Ok(line) = l else { break };
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if let Ok(event_msg) =
+                        serde_json::from_str::<crate::ipc::protocol::IpcEventMessage>(trimmed)
+                    {
+                        match event_msg.event {
+                            crate::dispatch::Event::WorkspaceSwitched { id } => {
+                                if let Some(ref mut st) = last_state {
+                                    st.active_workspace_id = id;
+                                    render_bar_line(st);
+                                }
+                            }
+                            crate::dispatch::Event::WindowFocused { id } => {
+                                if let Some(ref mut st) = last_state {
+                                    st.active_workspace_mut().focused_window = Some(id);
+                                    render_bar_line(st);
+                                }
+                            }
+                            _ => {
+                                // Full re-query on structural layout changes
+                                break;
+                            }
+                        }
                     }
                 }
             }
             Err(_) => {
                 print!("\r[truss-bar: waiting for compositor...]");
                 let _ = std::io::stdout().flush();
+                thread::sleep(Duration::from_millis(500));
             }
         }
-
-        thread::sleep(Duration::from_millis(500));
     }
 }
 
