@@ -256,6 +256,11 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
+            Command::ZoomChange { .. } | Command::ZoomReset => {
+                // Handled in compositor event loop / app state
+                Ok(DispatchResult::Ok)
+            }
+
             Command::WindowFocus { id } => {
                 state.focus_window(id)?;
                 self.broadcast(&Event::WindowFocused { id });

@@ -36,6 +36,20 @@ pub fn collect_render_elements(
     let pointer_loc = app.pointer_state.location;
     let cursor_pos = (pointer_loc.x as i32, pointer_loc.y as i32);
 
+    let zoom = app.zoom_factor.clamp(1.0, 5.0);
+    let center_x = pointer_loc.x;
+    let center_y = pointer_loc.y;
+
+    let zoom_pt = move |x: i32, y: i32| -> (i32, i32) {
+        if (zoom - 1.0).abs() < 1e-4 {
+            (x, y)
+        } else {
+            let zx = center_x + (x as f64 - center_x) * (zoom as f64);
+            let zy = center_y + (y as f64 - center_y) * (zoom as f64);
+            (zx.round() as i32, zy.round() as i32)
+        }
+    };
+
     match &app.cursor_status {
         CursorImageStatus::Hidden => {
             // No cursor to render
@@ -80,18 +94,22 @@ pub fn collect_render_elements(
             app.opacity_config.inactive_opacity
         };
 
-        let win_geom = (window.geometry.x, window.geometry.y);
+        let (wx, wy) = zoom_pt(window.geometry.x, window.geometry.y);
+        let win_geom = (wx, wy);
 
         // Render associated popups first (above parent window)
         for (popup, popup_loc) in
             smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
         {
-            let popup_abs_pos = (win_geom.0 + popup_loc.x, win_geom.1 + popup_loc.y);
+            let (px, py) = zoom_pt(
+                window.geometry.x + popup_loc.x,
+                window.geometry.y + popup_loc.y,
+            );
             let popup_elements = render_elements_from_surface_tree(
                 renderer,
                 popup.wl_surface(),
-                popup_abs_pos,
-                1.0,
+                (px, py),
+                zoom as f64,
                 window_alpha,
                 Kind::Unspecified,
             );
@@ -102,7 +120,7 @@ pub fn collect_render_elements(
             renderer,
             surface.wl_surface(),
             win_geom,
-            1.0,
+            zoom as f64,
             window_alpha,
             Kind::Unspecified,
         );
@@ -129,9 +147,12 @@ pub fn collect_render_elements(
         };
 
         if app.border_config.width > 0 && !window.fullscreen && !is_single_tiled {
-            let b = app.border_config.width as i32;
+            let b = ((app.border_config.width as f32) * zoom).round().max(1.0) as i32;
             let (x, y) = win_geom;
-            let (w, h) = (window.geometry.width as i32, window.geometry.height as i32);
+            let (w, h) = (
+                ((window.geometry.width as f32) * zoom).round() as i32,
+                ((window.geometry.height as f32) * zoom).round() as i32,
+            );
             let is_active = Some(window_id) == app.state.active_workspace().focused_window;
             let border_color = if is_active {
                 app.border_config.active_color

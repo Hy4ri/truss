@@ -223,6 +223,18 @@ impl LuaConfig {
         })?;
         cmd_table.set("move_to_special_workspace", win_move_special)?;
 
+        let zoom_change = self.lua.create_function(|lua, delta: f32| {
+            let cmd = Command::ZoomChange { delta };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("zoom_change", zoom_change)?;
+
+        let zoom_reset = self.lua.create_function(|lua, ()| {
+            let cmd = Command::ZoomReset;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("zoom_reset", zoom_reset)?;
+
         let focus_last_win = self.lua.create_function(|lua, ()| {
             let cmd = Command::WindowFocusLast;
             lua.to_value(&cmd)
