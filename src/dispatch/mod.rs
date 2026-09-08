@@ -49,6 +49,7 @@ pub struct Dispatcher {
     /// `ToplevelSurface` to `send_close()` the client. Queued (not executed
     /// inline) so command lists / macros stay atomic.
     pending_closes: Vec<WindowId>,
+    pending_force_kills: Vec<WindowId>,
 }
 
 impl Default for Dispatcher {
@@ -64,6 +65,7 @@ impl Dispatcher {
             layout_registry: LayoutRegistry::new(),
             layout_config: LayoutConfig::default(),
             pending_closes: Vec::new(),
+            pending_force_kills: Vec::new(),
         }
     }
 
@@ -87,6 +89,11 @@ impl Dispatcher {
     /// `ToplevelSurface` — otherwise the client process leaks forever.
     pub fn take_pending_closes(&mut self) -> Vec<WindowId> {
         std::mem::take(&mut self.pending_closes)
+    }
+
+    /// Take all window IDs queued for forceful process kill by `Command::WindowForceKill`.
+    pub fn take_pending_force_kills(&mut self) -> Vec<WindowId> {
+        std::mem::take(&mut self.pending_force_kills)
     }
 
     /// Recalculate geometries of all tiled windows on a given workspace within a usable display area.
@@ -264,14 +271,28 @@ impl Dispatcher {
             Command::WindowClose { id } => {
                 let win_id = match id {
                     Some(id) => id,
-                    None => match state.active_workspace().focused_window {
-                        Some(f) => f,
-                        None => return Ok(DispatchResult::Ok),
-                    },
+                    None => state.active_workspace().focused_window.ok_or_else(|| {
+                        DispatchError::InvalidParams("No focused window to close".into())
+                    })?,
                 };
+
                 state.remove_window(win_id)?;
-                self.broadcast(&Event::WindowDestroyed { id: win_id });
                 self.pending_closes.push(win_id);
+                self.broadcast(&Event::WindowDestroyed { id: win_id });
+                Ok(DispatchResult::Ok)
+            }
+
+            Command::WindowForceKill { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => state.active_workspace().focused_window.ok_or_else(|| {
+                        DispatchError::InvalidParams("No focused window to kill".into())
+                    })?,
+                };
+
+                state.remove_window(win_id)?;
+                self.pending_force_kills.push(win_id);
+                self.broadcast(&Event::WindowDestroyed { id: win_id });
                 Ok(DispatchResult::Ok)
             }
 

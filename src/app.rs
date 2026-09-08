@@ -136,6 +136,7 @@ pub struct App {
     /// reach — consumes it and calls `DrmDisplay::reset_state()` on each
     /// display so rendering resumes instead of black-screening forever.
     pub vt_resume_pending: bool,
+    pub display_handle: smithay::reexports::wayland_server::DisplayHandle,
 }
 
 impl App {
@@ -227,6 +228,7 @@ impl App {
             shutdown,
             needs_redraw: true,
             vt_resume_pending: false,
+            display_handle: dh,
         })
     }
 
@@ -437,6 +439,44 @@ impl App {
                 tracing::warn!("truss: configuration reload error: {e}");
             }
         }
+    }
+
+    /// Forcefully kill the process of the given window (or currently focused window) via SIGKILL
+    pub fn force_kill_window(&mut self, window_id: Option<WindowId>) -> bool {
+        use smithay::reexports::wayland_server::Resource;
+
+        let target_id = match window_id {
+            Some(id) => Some(id),
+            None => self.state.active_workspace().focused_window,
+        };
+
+        let Some(target_id) = target_id else {
+            return false;
+        };
+
+        let mut killed = false;
+        if let Some(surface) = self.surfaces.get(&target_id) {
+            let wl_surface = surface.wl_surface();
+            if let Some(client) = wl_surface.client() {
+                if let Ok(credentials) = client.get_credentials(&self.display_handle) {
+                    let pid = credentials.pid;
+                    if pid > 1 {
+                        unsafe {
+                            libc::kill(pid, libc::SIGKILL);
+                        }
+                        killed = true;
+                    }
+                }
+            }
+        }
+
+        // Clean up from compositor state immediately
+        let _ = self.state.remove_window(target_id);
+        self.surfaces.remove(&target_id);
+        self.refresh_layout_and_space();
+        self.needs_redraw = true;
+
+        killed
     }
 
     /// Refresh and recalculate layouts for active workspaces across outputs.

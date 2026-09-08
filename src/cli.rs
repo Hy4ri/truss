@@ -123,6 +123,7 @@ IPC COMMANDS:
     truss msg focus-last-window          Focus last active window (Alt+Tab)
     truss msg swap-master                Swap focused window with master
     truss msg close-window [ID]          Close target/focused window
+    truss msg force-kill-window [ID]     Force kill target/focused window process (SIGKILL)
     truss msg toggle-floating [ID]       Toggle floating mode
     truss msg toggle-fullscreen [ID]     Toggle fullscreen mode
     truss msg move-to-workspace <WS> [W] Move window to workspace (and follow)
@@ -178,6 +179,13 @@ pub fn handle_msg_command(
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(WindowId);
             Command::WindowClose { id }
+        }
+        "force-kill-window" | "force-kill" | "kill-window" => {
+            let id = args
+                .get(1)
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(WindowId);
+            Command::WindowForceKill { id }
         }
         "toggle-floating" => {
             let id = args

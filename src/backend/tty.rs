@@ -148,6 +148,9 @@ impl TtyBackend {
                                             surface.send_close();
                                         }
                                     }
+                                    for kid in data.dispatcher.take_pending_force_kills() {
+                                        data.force_kill_window(Some(kid));
+                                    }
                                     let new_focus = data.state.active_workspace().focused_window;
                                     data.set_focused_window(new_focus);
                                     FilterResult::Intercept(())
