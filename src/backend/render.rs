@@ -30,6 +30,10 @@ pub fn collect_render_elements(
     renderer: &mut GlesRenderer,
     cursor_manager: &mut CursorManager,
 ) -> Vec<TrussRenderElement> {
+    if !app.dpms_enabled {
+        return Vec::new();
+    }
+
     let mut elements = Vec::new();
 
     // 1. Cursor (top-most layer, rendered on top of everything)

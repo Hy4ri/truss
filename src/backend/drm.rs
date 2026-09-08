@@ -153,7 +153,12 @@ impl DrmDisplay {
                 return Ok(());
             }
         };
-        if let Err(e) = frame.clear(app.bg_color, damage_slice) {
+        let bg_color = if app.dpms_enabled {
+            app.bg_color
+        } else {
+            smithay::backend::renderer::Color32F::new(0.0, 0.0, 0.0, 1.0)
+        };
+        if let Err(e) = frame.clear(bg_color, damage_slice) {
             tracing::warn!("truss: DRM frame clear failed: {e}");
         }
         if let Err(e) = draw_render_elements(&mut frame, scale, &elements, damage_slice) {

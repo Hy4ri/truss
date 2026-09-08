@@ -256,7 +256,7 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
-            Command::ZoomChange { .. } | Command::ZoomReset => {
+            Command::ZoomChange { .. } | Command::ZoomReset | Command::DpmsToggle => {
                 // Handled in compositor event loop / app state
                 Ok(DispatchResult::Ok)
             }

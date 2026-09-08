@@ -131,6 +131,7 @@ IPC COMMANDS:
     truss msg move-to-special [ID]       Move window to special/scratchpad workspace
     truss msg zoom-change <DELTA>        Adjust full-screen zoom magnifier (+0.1, -0.1)
     truss msg zoom-reset                 Reset screen zoom back to 1.0 (normal)
+    truss msg dpms-toggle                Toggle display power management (screen sleep/blanking)
     truss msg move-to-workspace <WS> [W] Move window to workspace (and follow)
     truss msg move-to-workspace-silent <WS> [W] Move window to workspace (stay on current)
     truss msg layout-set <LAYOUT>        Set active workspace layout (master, monocle)
@@ -222,6 +223,7 @@ pub fn handle_msg_command(
             Command::ZoomChange { delta }
         }
         "zoom-reset" => Command::ZoomReset,
+        "dpms-toggle" | "dpms" => Command::DpmsToggle,
         "toggle-fullscreen" => {
             let id = args
                 .get(1)
