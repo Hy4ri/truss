@@ -200,6 +200,7 @@ pub fn handle_msg_command(
             Command::Spawn { command: cmd }
         }
         "quit" => Command::CompositorQuit,
+        "reload" | "config-reload" | "config.reload" => Command::ConfigReload,
         unknown => {
             eprintln!("truss msg: unknown command '{unknown}'.");
             std::process::exit(1);

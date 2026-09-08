@@ -71,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     match &config_source {
         ConfigSource::File(path) => {
+            app.config_path = Some(path.clone());
             info!("truss: loading configuration from {}", path.display());
             if let Err(e) = app.lua_config.load_file(path) {
                 warn!("truss: config load failed: {e}");
@@ -96,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
 
     let dh = display.handle();
@@ -123,6 +125,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Register IPC server with calloop event reactor
     app.ipc.register_calloop_source(&loop_handle)?;
+
+    // Register config file auto-reload watcher with calloop event reactor
+    if let Some(ref config_path) = app.config_path {
+        match truss::config::ConfigWatcher::new(config_path) {
+            Ok(watcher) => {
+                let _ = loop_handle.insert_source(
+                    Generic::new(watcher, Interest::READ, Mode::Level),
+                    move |_, watcher, app: &mut App| {
+                        let watcher = unsafe { watcher.get_mut() };
+                        if watcher.check_events() {
+                            if app.auto_reload {
+                                info!("truss: config file changed on disk, auto-reloading...");
+                                if let Err(e) = app.reload_config() {
+                                    warn!("truss: auto-reload failed: {e}");
+                                }
+                            } else {
+                                tracing::debug!(
+                                    "truss: config file changed on disk, but auto_reload is disabled"
+                                );
+                            }
+                        }
+                        Ok(PostAction::Continue)
+                    },
+                );
+                info!(
+                    "truss: auto-reload file watcher active for {}",
+                    config_path.display()
+                );
+            }
+            Err(e) => {
+                warn!("truss: failed to start config auto-reload watcher: {e}");
+            }
+        }
+    }
 
     // Trigger autostart applications configured in Lua
     app.lua_config.run_autostart_commands(socket_name);

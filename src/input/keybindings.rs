@@ -91,6 +91,10 @@ impl Keybindings {
         self.bindings.remove(pattern).is_some()
     }
 
+    pub fn clear(&mut self) {
+        self.bindings.clear();
+    }
+
     pub fn match_action(&self, modifiers: Modifiers, keysym: u32) -> Option<&KeyAction> {
         let pattern = KeyPattern::new(modifiers, keysym);
         if let Some(action) = self.bindings.get(&pattern) {

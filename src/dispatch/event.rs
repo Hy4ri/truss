@@ -38,6 +38,9 @@ pub enum Event {
         master_ratio: Option<f32>,
     },
 
+    #[serde(rename = "config.reload_requested")]
+    ConfigReloadRequested,
+
     #[serde(rename = "compositor.quitting")]
     CompositorQuitting,
 }
