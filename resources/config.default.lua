@@ -49,6 +49,8 @@ truss.keybind("ALT", "Tab", truss.cmd.focus_last_window())
 truss.keybind("SUPER", "Tab", truss.cmd.workspace_next())
 truss.keybind("SUPER+SHIFT", "Tab", truss.cmd.workspace_prev())
 truss.keybind("SUPER", "grave", truss.cmd.workspace_previous())
+truss.keybind("SUPER", "s", truss.cmd.toggle_special_workspace())
+truss.keybind("SUPER+SHIFT", "s", truss.cmd.move_to_special_workspace())
 for ws = 1, 9 do
     truss.keybind("SUPER", tostring(ws), truss.cmd.workspace_switch(ws))
     truss.keybind("SUPER+SHIFT", tostring(ws), truss.cmd.move_to_workspace(ws))

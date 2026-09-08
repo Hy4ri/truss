@@ -33,12 +33,18 @@ impl RenderManager {
     pub fn sync_windows(&mut self, state: &State, surfaces: &HashMap<WindowId, ToplevelSurface>) {
         let active_ws = state.active_workspace();
 
-        // 1. Remove windows no longer in active workspace (unless pinned)
+        // 1. Remove windows no longer in active workspace (unless pinned or special workspace active)
         let current_windows = self.space.elements().cloned().collect::<Vec<_>>();
         for swin in current_windows {
             let matches_active = surfaces.iter().any(|(win_id, toplevel)| {
                 let is_pinned = state.windows.get(win_id).map(|w| w.pinned).unwrap_or(false);
-                (active_ws.windows.contains(win_id) || is_pinned)
+                let is_special = state.special_workspace_active
+                    && state
+                        .windows
+                        .get(win_id)
+                        .map(|w| w.workspace_id == crate::state::SPECIAL_WORKSPACE_ID)
+                        .unwrap_or(false);
+                (active_ws.windows.contains(win_id) || is_pinned || is_special)
                     && swin
                         .toplevel()
                         .map(|t| t.wl_surface() == toplevel.wl_surface())
@@ -50,11 +56,20 @@ impl RenderManager {
             }
         }
 
-        // 2. Map and position active workspace windows according to state geometry (including pinned)
+        // 2. Map and position active workspace windows according to state geometry (including pinned/special)
         let mut visible_windows = active_ws.windows.clone();
         for (&wid, win) in &state.windows {
             if win.pinned && !visible_windows.contains(&wid) {
                 visible_windows.push(wid);
+            }
+        }
+        if state.special_workspace_active {
+            if let Some(special_ws) = state.workspaces.get(&crate::state::SPECIAL_WORKSPACE_ID) {
+                for &wid in &special_ws.windows {
+                    if !visible_windows.contains(&wid) {
+                        visible_windows.push(wid);
+                    }
+                }
             }
         }
 

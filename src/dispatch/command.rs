@@ -18,6 +18,12 @@ pub enum Command {
     #[serde(rename = "workspace.previous")]
     WorkspacePrevious,
 
+    #[serde(rename = "workspace.toggle_special")]
+    WorkspaceToggleSpecial,
+
+    #[serde(rename = "window.move_to_special")]
+    WindowMoveToSpecial { window_id: Option<WindowId> },
+
     #[serde(rename = "window.focus")]
     WindowFocus { id: WindowId },
 

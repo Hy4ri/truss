@@ -9,7 +9,14 @@ mod tests {
         let app = App::new(&mut display, "test.sock").unwrap();
 
         assert_eq!(app.state.active_workspace_id, 1);
-        assert_eq!(app.state.workspaces.len(), 9);
+        assert_eq!(
+            app.state
+                .workspaces
+                .keys()
+                .filter(|&&k| k != truss::state::SPECIAL_WORKSPACE_ID)
+                .count(),
+            9
+        );
         assert!(app.surfaces.is_empty());
         assert!(app.clients.is_empty());
     }

@@ -127,6 +127,8 @@ IPC COMMANDS:
     truss msg toggle-floating [ID]       Toggle floating mode
     truss msg toggle-pin [ID]            Toggle pinned mode (sticky across workspaces)
     truss msg toggle-fullscreen [ID]     Toggle fullscreen mode
+    truss msg toggle-special             Toggle special/scratchpad workspace overlay
+    truss msg move-to-special [ID]       Move window to special/scratchpad workspace
     truss msg move-to-workspace <WS> [W] Move window to workspace (and follow)
     truss msg move-to-workspace-silent <WS> [W] Move window to workspace (stay on current)
     truss msg layout-set <LAYOUT>        Set active workspace layout (master, monocle)
@@ -201,6 +203,14 @@ pub fn handle_msg_command(
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(WindowId);
             Command::WindowTogglePin { id }
+        }
+        "toggle-special" | "special" => Command::WorkspaceToggleSpecial,
+        "move-to-special" => {
+            let id = args
+                .get(1)
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(WindowId);
+            Command::WindowMoveToSpecial { window_id: id }
         }
         "toggle-fullscreen" => {
             let id = args
