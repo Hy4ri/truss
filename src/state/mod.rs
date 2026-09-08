@@ -162,7 +162,21 @@ impl State {
             .windows
             .get_mut(&id)
             .ok_or(StateError::WindowNotFound(id))?;
-        window.fullscreen = !window.fullscreen;
+        if !window.fullscreen {
+            if window.saved_geometry.is_none() {
+                window.saved_geometry = Some(window.geometry);
+            }
+            window.fullscreen = true;
+        } else {
+            window.fullscreen = false;
+            if window.floating {
+                if let Some(saved) = window.saved_geometry.take() {
+                    window.geometry = saved;
+                }
+            } else {
+                window.saved_geometry = None;
+            }
+        }
         Ok(window.fullscreen)
     }
 
@@ -171,7 +185,19 @@ impl State {
             .windows
             .get_mut(&id)
             .ok_or(StateError::WindowNotFound(id))?;
-        window.maximized = !window.maximized;
+        if !window.maximized {
+            if window.saved_geometry.is_none() {
+                window.saved_geometry = Some(window.geometry);
+            }
+            window.maximized = true;
+        } else {
+            window.maximized = false;
+            if window.floating && !window.fullscreen {
+                if let Some(saved) = window.saved_geometry.take() {
+                    window.geometry = saved;
+                }
+            }
+        }
         Ok(window.maximized)
     }
 

@@ -134,3 +134,106 @@ fn test_dispatcher_layout_commands() {
         .unwrap();
     assert_eq!(state.active_workspace().layout, "monocle");
 }
+
+#[test]
+fn test_floating_fullscreen_restore_geometry() {
+    let mut state = State::new();
+    let mut dispatcher = Dispatcher::new();
+
+    let win_id = state.create_window(Some(1)).unwrap();
+    let initial_floating_geom = Rect::new(100, 150, 600, 400);
+    state
+        .set_window_geometry(win_id, initial_floating_geom)
+        .unwrap();
+
+    // 1. Make window floating
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleFloating { id: Some(win_id) },
+        )
+        .unwrap();
+    assert!(state.windows.get(&win_id).unwrap().floating);
+
+    let usable_area = Rect::new(0, 30, 1920, 1050);
+    let full_area = Rect::new(0, 0, 1920, 1080);
+    dispatcher.recalculate_workspace_layout_with_full_area(&mut state, 1, usable_area, full_area);
+    assert_eq!(
+        state.windows.get(&win_id).unwrap().geometry,
+        initial_floating_geom
+    );
+
+    // 2. Make window fullscreen
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleFullscreen { id: Some(win_id) },
+        )
+        .unwrap();
+    assert!(state.windows.get(&win_id).unwrap().fullscreen);
+
+    dispatcher.recalculate_workspace_layout_with_full_area(&mut state, 1, usable_area, full_area);
+    assert_eq!(state.windows.get(&win_id).unwrap().geometry, full_area);
+
+    // 3. Toggle fullscreen off (back to floating mode)
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleFullscreen { id: Some(win_id) },
+        )
+        .unwrap();
+    assert!(!state.windows.get(&win_id).unwrap().fullscreen);
+    assert!(state.windows.get(&win_id).unwrap().floating);
+
+    dispatcher.recalculate_workspace_layout_with_full_area(&mut state, 1, usable_area, full_area);
+    // Geometry must be restored to the pre-fullscreen floating geometry
+    assert_eq!(
+        state.windows.get(&win_id).unwrap().geometry,
+        initial_floating_geom
+    );
+}
+
+#[test]
+fn test_floating_maximize_and_fullscreen_restore_geometry() {
+    let mut state = State::new();
+    let mut dispatcher = Dispatcher::new();
+
+    let win_id = state.create_window(Some(1)).unwrap();
+    let initial_floating_geom = Rect::new(80, 120, 500, 350);
+    state
+        .set_window_geometry(win_id, initial_floating_geom)
+        .unwrap();
+
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleFloating { id: Some(win_id) },
+        )
+        .unwrap();
+
+    let usable_area = Rect::new(0, 30, 1920, 1050);
+    let full_area = Rect::new(0, 0, 1920, 1080);
+
+    // Maximize floating window
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleMaximize { id: Some(win_id) },
+        )
+        .unwrap();
+    dispatcher.recalculate_workspace_layout_with_full_area(&mut state, 1, usable_area, full_area);
+    assert_eq!(state.windows.get(&win_id).unwrap().geometry, usable_area);
+
+    // Un-maximize returns to initial floating geometry
+    dispatcher
+        .dispatch(
+            &mut state,
+            Command::WindowToggleMaximize { id: Some(win_id) },
+        )
+        .unwrap();
+    dispatcher.recalculate_workspace_layout_with_full_area(&mut state, 1, usable_area, full_area);
+    assert_eq!(
+        state.windows.get(&win_id).unwrap().geometry,
+        initial_floating_geom
+    );
+}
