@@ -33,11 +33,12 @@ impl RenderManager {
     pub fn sync_windows(&mut self, state: &State, surfaces: &HashMap<WindowId, ToplevelSurface>) {
         let active_ws = state.active_workspace();
 
-        // 1. Remove windows no longer in active workspace
+        // 1. Remove windows no longer in active workspace (unless pinned)
         let current_windows = self.space.elements().cloned().collect::<Vec<_>>();
         for swin in current_windows {
             let matches_active = surfaces.iter().any(|(win_id, toplevel)| {
-                active_ws.windows.contains(win_id)
+                let is_pinned = state.windows.get(win_id).map(|w| w.pinned).unwrap_or(false);
+                (active_ws.windows.contains(win_id) || is_pinned)
                     && swin
                         .toplevel()
                         .map(|t| t.wl_surface() == toplevel.wl_surface())
@@ -49,8 +50,15 @@ impl RenderManager {
             }
         }
 
-        // 2. Map and position active workspace windows according to state geometry
-        for &win_id in &active_ws.windows {
+        // 2. Map and position active workspace windows according to state geometry (including pinned)
+        let mut visible_windows = active_ws.windows.clone();
+        for (&wid, win) in &state.windows {
+            if win.pinned && !visible_windows.contains(&wid) {
+                visible_windows.push(wid);
+            }
+        }
+
+        for &win_id in &visible_windows {
             if let (Some(win_state), Some(toplevel)) =
                 (state.windows.get(&win_id), surfaces.get(&win_id))
             {

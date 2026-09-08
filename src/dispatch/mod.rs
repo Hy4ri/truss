@@ -318,6 +318,28 @@ impl Dispatcher {
                 Ok(DispatchResult::Ok)
             }
 
+            Command::WindowTogglePin { id } => {
+                let win_id = match id {
+                    Some(id) => id,
+                    None => match state.active_workspace().focused_window {
+                        Some(f) => f,
+                        None => return Ok(DispatchResult::Ok),
+                    },
+                };
+                state.toggle_pinned(win_id)?;
+                let window = state
+                    .windows
+                    .get(&win_id)
+                    .expect("window was just validated");
+                self.broadcast(&Event::WindowStateChanged {
+                    id: win_id,
+                    floating: window.floating,
+                    fullscreen: window.fullscreen,
+                    maximized: window.maximized,
+                });
+                Ok(DispatchResult::Ok)
+            }
+
             Command::WindowToggleFullscreen { id } => {
                 let win_id = match id {
                     Some(id) => id,

@@ -178,8 +178,16 @@ pub fn collect_render_elements(
 
     let active_ws = app.state.active_workspace();
 
+    // Collect all windows to render on the active workspace (including pinned windows from other workspaces)
+    let mut visible_window_ids = active_ws.windows.clone();
+    for (&wid, win) in &app.state.windows {
+        if win.pinned && !visible_window_ids.contains(&wid) {
+            visible_window_ids.push(wid);
+        }
+    }
+
     // 2. Fullscreen Windows (TOP-MOST: max on top, even covers Overlay & Top layers/bar)
-    for &window_id in active_ws.windows.iter().rev() {
+    for &window_id in visible_window_ids.iter().rev() {
         if let Some(win) = app.state.windows.get(&window_id) {
             if win.fullscreen {
                 render_window_tree(&mut elements, renderer, window_id);
@@ -231,7 +239,7 @@ pub fn collect_render_elements(
     }
 
     // 4. Floating Windows (Always on top of tiled windows)
-    for &window_id in active_ws.windows.iter().rev() {
+    for &window_id in visible_window_ids.iter().rev() {
         if let Some(win) = app.state.windows.get(&window_id) {
             if win.floating && !win.fullscreen {
                 render_window_tree(&mut elements, renderer, window_id);
@@ -240,7 +248,7 @@ pub fn collect_render_elements(
     }
 
     // 5. Tiled Windows (In layout master/stack order)
-    for &window_id in &active_ws.windows {
+    for &window_id in &visible_window_ids {
         if let Some(win) = app.state.windows.get(&window_id) {
             if !win.floating && !win.fullscreen {
                 render_window_tree(&mut elements, renderer, window_id);

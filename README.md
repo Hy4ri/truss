@@ -188,6 +188,7 @@ truss.keybind("SUPER", "v", "kitty") -- a plain string spawns a shell command
 | `truss.cmd.close_window([id])` | Close the focused window (or the window with id `id`) |
 | `truss.cmd.force_kill_window([id])` | Force kill the focused window process via SIGKILL |
 | `truss.cmd.toggle_floating([id])` | Toggle floating on the focused window (or the window with id `id`) |
+| `truss.cmd.toggle_pin([id])` | Toggle pinning (sticky across workspaces) on the focused window |
 | `truss.cmd.toggle_fullscreen([id])` | Toggle fullscreen on the focused window (or the window with id `id`) |
 | `truss.cmd.move_to_workspace(id)` | Move focused window to workspace `id` (and follow) |
 | `truss.cmd.move_to_workspace_silent(id)` | Move focused window to workspace `id` silently (stay on current) |
