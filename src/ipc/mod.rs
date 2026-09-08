@@ -151,6 +151,14 @@ impl IpcServer {
                                                                                     .send_close();
                                                                             }
                                                                         }
+                                                                        for kid in app
+                                                                            .dispatcher
+                                                                            .take_pending_force_kills()
+                                                                        {
+                                                                            app.force_kill_window(
+                                                                                Some(kid),
+                                                                            );
+                                                                        }
                                                                         IpcResponse::success(
                                                                             req.id, res,
                                                                         )

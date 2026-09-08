@@ -695,6 +695,41 @@ fn test_move_to_workspace_silent_binding() {
 }
 
 #[test]
+fn test_force_kill_window_binding() {
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(
+        r#"
+        truss.keybind("SUPER+SHIFT", "q", truss.cmd.force_kill_active_window())
+    "#,
+    )
+    .unwrap();
+
+    let mut kb = truss::Keybindings::new();
+    cfg.apply_keybindings(&mut kb);
+
+    let mut state = truss::State::new();
+    let mut dispatcher = truss::Dispatcher::new();
+
+    let w1 = state.create_window(Some(1)).unwrap();
+    state.focus_window(w1).unwrap();
+    assert_eq!(state.active_workspace().focused_window, Some(w1));
+
+    let super_shift_mod = truss::Modifiers {
+        logo: true,
+        shift: true,
+        ..truss::Modifiers::NONE
+    };
+
+    // 'q' is 0x0071
+    let action = kb.match_action(super_shift_mod, 0x0071).unwrap();
+    kb.execute_action(action, &mut dispatcher, &mut state)
+        .unwrap();
+
+    assert!(!state.windows.contains_key(&w1));
+    assert_eq!(dispatcher.take_pending_force_kills(), vec![w1]);
+}
+
+#[test]
 fn test_config_watcher_detects_file_save() {
     use truss::config::ConfigWatcher;
 

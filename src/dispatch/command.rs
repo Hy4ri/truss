@@ -33,6 +33,9 @@ pub enum Command {
     #[serde(rename = "window.close")]
     WindowClose { id: Option<WindowId> },
 
+    #[serde(rename = "window.force_kill")]
+    WindowForceKill { id: Option<WindowId> },
+
     #[serde(rename = "window.toggle_floating")]
     WindowToggleFloating { id: Option<WindowId> },
 

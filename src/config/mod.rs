@@ -240,13 +240,22 @@ impl LuaConfig {
         })?;
         cmd_table.set("swap_master", swap_master)?;
 
-        let close_win = self.lua.create_function(|lua, id: Option<u64>| {
+        let win_close = self.lua.create_function(|lua, id: Option<u64>| {
             let cmd = Command::WindowClose {
                 id: id.map(WindowId),
             };
             lua.to_value(&cmd)
         })?;
-        cmd_table.set("close_window", close_win)?;
+        cmd_table.set("close_window", win_close)?;
+
+        let win_force_kill = self.lua.create_function(|lua, id: Option<u64>| {
+            let cmd = Command::WindowForceKill {
+                id: id.map(WindowId),
+            };
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("force_kill_window", win_force_kill.clone())?;
+        cmd_table.set("force_kill_active_window", win_force_kill)?;
 
         let toggle_float = self.lua.create_function(|lua, id: Option<u64>| {
             let cmd = Command::WindowToggleFloating {
