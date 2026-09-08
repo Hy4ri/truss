@@ -380,6 +380,7 @@ impl LuaConfig {
     }
 
     /// Apply settings registered via `truss.set(...)` onto the compositor.
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_settings(
         &self,
         dispatcher: &mut crate::dispatch::Dispatcher,
@@ -387,6 +388,7 @@ impl LuaConfig {
         bg_color: &mut smithay::backend::renderer::Color32F,
         border_config: &mut crate::app::BorderConfig,
         focus_mode: &mut crate::app::FocusMode,
+        keyboard_config: &mut crate::app::KeyboardConfig,
         auto_reload: &mut bool,
     ) {
         let Ok(settings) = self
@@ -483,6 +485,61 @@ impl LuaConfig {
                         }
                     } else {
                         warn!("truss: invalid auto_reload setting");
+                    }
+                }
+                "kb_layout" | "keyboard_layout" | "input.kb_layout" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(layout) => keyboard_config.layout = layout.trim().to_string(),
+                        Err(e) => warn!("truss: invalid kb_layout setting: {e}"),
+                    }
+                }
+                "kb_options" | "keyboard_options" | "input.kb_options" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(opts) => {
+                            let trimmed = opts.trim();
+                            keyboard_config.options = if trimmed.is_empty() {
+                                None
+                            } else {
+                                Some(trimmed.to_string())
+                            };
+                        }
+                        Err(e) => warn!("truss: invalid kb_options setting: {e}"),
+                    }
+                }
+                "kb_variant" | "keyboard_variant" | "input.kb_variant" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(variant) => keyboard_config.variant = variant.trim().to_string(),
+                        Err(e) => warn!("truss: invalid kb_variant setting: {e}"),
+                    }
+                }
+                "kb_model" | "keyboard_model" | "input.kb_model" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(model) => keyboard_config.model = model.trim().to_string(),
+                        Err(e) => warn!("truss: invalid kb_model setting: {e}"),
+                    }
+                }
+                "kb_rules" | "keyboard_rules" | "input.kb_rules" => {
+                    match self.lua.from_value::<String>(value) {
+                        Ok(rules) => keyboard_config.rules = rules.trim().to_string(),
+                        Err(e) => warn!("truss: invalid kb_rules setting: {e}"),
+                    }
+                }
+                "repeat_rate" | "input.repeat_rate" => {
+                    match self.lua.from_value::<i32>(value) {
+                        Ok(rate) => keyboard_config.repeat_rate = rate.max(1),
+                        Err(e) => warn!("truss: invalid repeat_rate setting: {e}"),
+                    }
+                }
+                "repeat_delay" | "input.repeat_delay" => {
+                    match self.lua.from_value::<i32>(value) {
+                        Ok(delay) => keyboard_config.repeat_delay = delay.max(0),
+                        Err(e) => warn!("truss: invalid repeat_delay setting: {e}"),
+                    }
+                }
+                "numlock_by_default" | "input.numlock_by_default" => {
+                    match self.lua.from_value::<bool>(value) {
+                        Ok(b) => keyboard_config.numlock_by_default = b,
+                        Err(e) => warn!("truss: invalid numlock_by_default setting: {e}"),
                     }
                 }
                 other => warn!("truss: unknown setting '{other}'"),

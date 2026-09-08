@@ -96,6 +96,10 @@ impl TtyBackend {
                                 let sym = handle.modified_sym().raw();
                                 let raw_sym =
                                     handle.raw_syms().first().map(|s| s.raw()).unwrap_or(sym);
+                                let latin_sym = handle
+                                    .raw_latin_sym_or_raw_current_sym()
+                                    .map(|s| s.raw())
+                                    .unwrap_or(sym);
 
                                 // VT Switching escape hatch: XF86Switch_VT_1..12, Ctrl+Alt+F1..12, or evdev keycodes
                                 // (check on both press and release for safety, but only act on press)
@@ -126,6 +130,9 @@ impl TtyBackend {
                                     .match_action(current_modifiers, sym)
                                     .or_else(|| {
                                         data.keybindings.match_action(current_modifiers, raw_sym)
+                                    })
+                                    .or_else(|| {
+                                        data.keybindings.match_action(current_modifiers, latin_sym)
                                     })
                                     .cloned()
                                 {
