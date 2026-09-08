@@ -1,10 +1,12 @@
 pub mod plugins;
+pub mod watcher;
 
 use mlua::{Lua, LuaSerdeExt};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 pub use plugins::LuaPluginManager;
+pub use watcher::ConfigWatcher;
 
 use crate::dispatch::{Command, Event};
 use crate::input::{KeyAction, KeyPattern, Keybindings, Modifiers};
@@ -260,6 +262,13 @@ impl LuaConfig {
         })?;
         cmd_table.set("quit", quit)?;
 
+        let reload = self.lua.create_function(|lua, ()| {
+            let cmd = Command::ConfigReload;
+            lua.to_value(&cmd)
+        })?;
+        cmd_table.set("reload_config", reload.clone())?;
+        cmd_table.set("config_reload", reload)?;
+
         truss.set("cmd", cmd_table)?;
         globals.set("truss", truss)?;
 
@@ -378,6 +387,7 @@ impl LuaConfig {
         bg_color: &mut smithay::backend::renderer::Color32F,
         border_config: &mut crate::app::BorderConfig,
         focus_mode: &mut crate::app::FocusMode,
+        auto_reload: &mut bool,
     ) {
         let Ok(settings) = self
             .lua
@@ -462,6 +472,19 @@ impl LuaConfig {
                         Err(e) => warn!("truss: invalid focus_follow_mouse setting: {e}"),
                     }
                 }
+                "auto_reload" | "hot_reload" => {
+                    if let Ok(b) = self.lua.from_value::<bool>(value.clone()) {
+                        *auto_reload = b;
+                    } else if let Ok(s) = self.lua.from_value::<String>(value) {
+                        match s.trim().to_lowercase().as_str() {
+                            "true" | "yes" | "1" | "on" => *auto_reload = true,
+                            "false" | "no" | "0" | "off" => *auto_reload = false,
+                            other => warn!("truss: invalid auto_reload setting: {other}"),
+                        }
+                    } else {
+                        warn!("truss: invalid auto_reload setting");
+                    }
+                }
                 other => warn!("truss: unknown setting '{other}'"),
             }
         }
@@ -491,6 +514,7 @@ impl LuaConfig {
             Event::WindowStateChanged { .. } => "window.state_changed",
             Event::LayoutChanged { .. } => "layout.changed",
             Event::LayoutConfigChanged { .. } => "layout.config_changed",
+            Event::ConfigReloadRequested => "config.reload_requested",
             Event::CompositorQuitting => "compositor.quitting",
         };
 

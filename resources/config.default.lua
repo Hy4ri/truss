@@ -18,6 +18,8 @@ truss.set("active_border_color", "#80d5d2")
 truss.set("inactive_border_color", "#333333")
 -- Window focus mode: "click" (default) or "follow_mouse"
 truss.set("focus_mode", "click")
+-- Auto reload configuration when config file is saved
+truss.set("auto_reload", true)
 
 -- ------------------------------------------------------------------------------
 -- 2. Keybindings
@@ -26,6 +28,7 @@ truss.keybind("SUPER", "Return", truss.cmd.spawn("kitty"))
 truss.keybind("SUPER", "d", truss.cmd.spawn("fuzzel || rofi -show drun || wofi"))
 truss.keybind("SUPER", "q", truss.cmd.close_window())
 truss.keybind("SUPER+SHIFT", "q", truss.cmd.quit())
+truss.keybind("SUPER+SHIFT", "r", truss.cmd.reload_config())
 truss.keybind("SUPER", "f", truss.cmd.toggle_fullscreen())
 truss.keybind("SUPER", "m", truss.cmd.toggle_maximize())
 truss.keybind("SUPER+SHIFT", "space", truss.cmd.toggle_floating())

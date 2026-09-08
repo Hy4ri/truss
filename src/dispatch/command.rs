@@ -48,6 +48,9 @@ pub enum Command {
     #[serde(rename = "spawn")]
     Spawn { command: String },
 
+    #[serde(rename = "config.reload")]
+    ConfigReload,
+
     #[serde(rename = "state.get")]
     StateGet,
 

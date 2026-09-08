@@ -146,6 +146,7 @@ fn test_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
 
     assert_eq!(app.dispatcher.layout_config.gap, 16);
@@ -176,6 +177,7 @@ fn test_border_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
 
     assert_eq!(app.border_config.width, 4);
@@ -202,6 +204,7 @@ fn test_invalid_setting_warns() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
 
     assert_eq!(app.dispatcher.layout_config.gap, 8);
@@ -302,6 +305,7 @@ fn test_parse_hex_color_unicode_safe() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
 
     assert!((app.bg_color.r() - 0.08).abs() < 1e-6);
@@ -363,6 +367,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
 
@@ -377,6 +382,7 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::Click);
 
@@ -391,6 +397,112 @@ fn test_focus_mode_settings_applied() {
         &mut app.bg_color,
         &mut app.border_config,
         &mut app.focus_mode,
+        &mut app.auto_reload,
     );
     assert_eq!(app.focus_mode, truss::FocusMode::FollowMouse);
+}
+
+#[test]
+fn test_auto_reload_setting_applied() {
+    let _guard = APP_LOCK.lock().unwrap();
+    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
+    assert!(app.auto_reload);
+
+    // Disable via auto_reload boolean
+    let cfg = LuaConfig::new().unwrap();
+    cfg.load_string(r#"truss.set("auto_reload", false)"#)
+        .unwrap();
+    cfg.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+        &mut app.auto_reload,
+    );
+    assert!(!app.auto_reload);
+
+    // Re-enable via hot_reload alias
+    let cfg2 = LuaConfig::new().unwrap();
+    cfg2.load_string(r#"truss.set("hot_reload", true)"#)
+        .unwrap();
+    cfg2.apply_settings(
+        &mut app.dispatcher,
+        &mut app.state,
+        &mut app.bg_color,
+        &mut app.border_config,
+        &mut app.focus_mode,
+        &mut app.auto_reload,
+    );
+    assert!(app.auto_reload);
+}
+
+#[test]
+fn test_reload_config_lifecycle_and_error_recovery() {
+    let _guard = APP_LOCK.lock().unwrap();
+    let dir = unique_temp_dir("hot_reload");
+    let cfg_file = dir.join("config.lua");
+
+    std::fs::write(
+        &cfg_file,
+        r#"
+        truss.set("gap", 12)
+        truss.set("auto_reload", true)
+        truss.keybind("SUPER", "q", truss.cmd.quit())
+    "#,
+    )
+    .unwrap();
+
+    let mut display = smithay::reexports::wayland_server::Display::<App>::new().unwrap();
+    let mut app = App::new(&mut display, "test.sock").unwrap();
+    app.config_path = Some(cfg_file.clone());
+
+    // Initial reload loads the file
+    assert!(app.reload_config().is_ok());
+    assert_eq!(app.dispatcher.layout_config.gap, 12);
+    assert!(app.auto_reload);
+
+    // 2. Modify config on disk and reload
+    std::fs::write(
+        &cfg_file,
+        r#"
+        truss.set("gap", 24)
+        truss.set("auto_reload", false)
+    "#,
+    )
+    .unwrap();
+    assert!(app.reload_config().is_ok());
+    assert_eq!(app.dispatcher.layout_config.gap, 24);
+    assert!(!app.auto_reload);
+
+    // 3. Write invalid Lua syntax — reload fails, but previous working state is preserved!
+    std::fs::write(&cfg_file, "this is definitely not valid lua !!!").unwrap();
+    assert!(app.reload_config().is_err());
+    // Existing working configuration remains active
+    assert_eq!(app.dispatcher.layout_config.gap, 24);
+    assert!(!app.auto_reload);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_config_watcher_detects_file_save() {
+    use truss::config::ConfigWatcher;
+
+    let dir = unique_temp_dir("watcher");
+    let cfg_file = dir.join("config.lua");
+    std::fs::write(&cfg_file, "truss.set('gap', 8)").unwrap();
+
+    let mut watcher = ConfigWatcher::new(&cfg_file).unwrap();
+    // Initially queue is empty
+    assert!(!watcher.check_events());
+
+    // Overwrite file
+    std::fs::write(&cfg_file, "truss.set('gap', 16)").unwrap();
+
+    // Inotify should catch the write
+    assert!(watcher.check_events());
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

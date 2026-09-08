@@ -83,6 +83,8 @@ pub struct App {
     pub bg_color: smithay::backend::renderer::Color32F,
     pub border_config: BorderConfig,
     pub focus_mode: FocusMode,
+    pub config_path: Option<std::path::PathBuf>,
+    pub auto_reload: bool,
     pub output_manager: OutputManager,
     pub render_manager: RenderManager,
     pub lua_config: LuaConfig,
@@ -178,6 +180,8 @@ impl App {
             bg_color: DESKTOP_BG_COLOR,
             border_config: BorderConfig::default(),
             focus_mode: FocusMode::default(),
+            config_path: None,
+            auto_reload: true,
             output_manager,
             render_manager,
             lua_config,
@@ -310,10 +314,54 @@ impl App {
             .move_window_to_workspace(window_id, requested_workspace);
     }
 
-    /// Deliver dispatcher events to Lua hooks without blocking the compositor.
-    pub fn process_pending_events(&self) {
+    /// Reload configuration from `self.config_path` if available.
+    pub fn reload_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(path) = self.config_path.clone() else {
+            return Ok(());
+        };
+
+        let new_config = LuaConfig::new()?;
+        new_config.load_file(&path)?;
+
+        // Atomically replace configuration once successfully parsed and validated
+        self.lua_config = new_config;
+        self.window_rules.clear();
+        self.lua_config
+            .apply_rules_to_manager(&mut self.window_rules);
+        self.keybindings.clear();
+        self.lua_config.apply_keybindings(&mut self.keybindings);
+        self.lua_config.apply_settings(
+            &mut self.dispatcher,
+            &mut self.state,
+            &mut self.bg_color,
+            &mut self.border_config,
+            &mut self.focus_mode,
+            &mut self.auto_reload,
+        );
+        self.lua_config.apply_to_dispatcher(&mut self.dispatcher);
+        self.refresh_layout_and_space();
+        self.needs_redraw = true;
+
+        tracing::info!(
+            "truss: configuration reloaded successfully from {}",
+            path.display()
+        );
+        Ok(())
+    }
+
+    /// Deliver dispatcher events to Lua hooks and handle compositor-level events.
+    pub fn process_pending_events(&mut self) {
+        let mut reload_requested = false;
         for event in self.event_rx.try_iter() {
+            if let Event::ConfigReloadRequested = event {
+                reload_requested = true;
+            }
             self.lua_config.handle_event(&event);
+        }
+        if reload_requested {
+            if let Err(e) = self.reload_config() {
+                tracing::warn!("truss: configuration reload error: {e}");
+            }
         }
     }
 

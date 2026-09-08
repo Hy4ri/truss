@@ -368,6 +368,11 @@ impl Dispatcher {
 
             Command::StateGet => Ok(DispatchResult::State(state.clone())),
 
+            Command::ConfigReload => {
+                self.broadcast(&Event::ConfigReloadRequested);
+                Ok(DispatchResult::Ok)
+            }
+
             Command::CompositorQuit => {
                 self.broadcast(&Event::CompositorQuitting);
                 Ok(DispatchResult::Quitting)

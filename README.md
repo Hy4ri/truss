@@ -134,12 +134,14 @@ truss.set("border_width", 2)     -- window border thickness (pixels)
 truss.set("active_border_color", "#80d5d2")   -- active window border color
 truss.set("inactive_border_color", "#333333") -- inactive window border color
 truss.set("focus_mode", "click") -- "click" (default) or "follow_mouse" / "sloppy"
+truss.set("auto_reload", true)   -- automatically reload config when saved (default: true)
 ```
 
 ### Keybindings
 
 ```lua
 truss.keybind("SUPER+SHIFT", "q", truss.cmd.quit())
+truss.keybind("SUPER+SHIFT", "r", truss.cmd.reload_config())
 truss.keybind("SUPER", "d", truss.cmd.spawn("fuzzel"))
 truss.keybind("SUPER", "v", "kitty") -- a plain string spawns a shell command
 ```
