@@ -1,0 +1,44 @@
+name: Nix Packaging
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Nix (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Evaluate module and build release-backed checks
+        run: nix flake check --print-build-logs
+      - name: Verify installed release and session registration
+        run: |
+          nix build .#default --print-build-logs
+          version=$(nix eval --raw .#default.version)
+          test "$(result/bin/truss --version)" = "truss $version"
+          test -x result/bin/truss-session
+          test -f result/share/wayland-sessions/truss.desktop
+          test -f result/share/systemd/user/truss-session.target || test -f result/lib/systemd/user/truss-session.target
