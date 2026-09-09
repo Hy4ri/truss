@@ -1,0 +1,53 @@
+#!/bin/sh
+# Run from a display manager or an active local TTY, never as root.
+set -eu
+if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -d "$XDG_RUNTIME_DIR" ]; then
+    printf '%s\n' 'truss-session: a logind login with XDG_RUNTIME_DIR is required' >&2
+    exit 1
+fi
+if [ "$(id -u)" = 0 ]; then
+    printf '%s\n' 'truss-session: log in as a normal user, not root' >&2
+    exit 1
+fi
+if [ "$#" -ne 0 ]; then
+    printf '%s\n' 'truss-session takes no arguments; use truss directly for custom/nested backends' >&2
+    exit 1
+fi
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    exec dbus-run-session -- "$0"
+fi
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=truss
+export XDG_SESSION_DESKTOP=truss
+export WAYLAND_DISPLAY=truss-0
+export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-logind}"
+unset DISPLAY
+# This launcher is deliberately TTY-only; setting WAYLAND_DISPLAY before
+# starting a nested compositor would make it connect to its own socket.
+managed=0
+if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd XDG_SESSION_TYPE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP WAYLAND_DISPLAY PATH
+    if systemctl --user cat truss-session.target >/dev/null 2>&1; then
+        systemctl --user start truss-session.target
+        managed=1
+    fi
+else
+    dbus-update-activation-environment XDG_SESSION_TYPE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP WAYLAND_DISPLAY PATH
+fi
+cleanup() {
+    if [ "$managed" = 1 ]; then
+        systemctl --user stop truss-session.target || true
+    fi
+    # D-Bus cannot unset activation variables; empty values prevent stale sockets.
+    dbus-update-activation-environment WAYLAND_DISPLAY= XDG_CURRENT_DESKTOP= XDG_SESSION_DESKTOP= XDG_SESSION_TYPE= || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user unset-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || true
+    fi
+}
+trap cleanup EXIT
+truss --backend tty &
+pid=$!
+trap 'kill -TERM "$pid" 2>/dev/null || true' HUP INT TERM
+status=0
+wait "$pid" || status=$?
+exit "$status"

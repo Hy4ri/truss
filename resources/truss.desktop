@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Truss
+Comment=Keyboard-first dynamic tiling Wayland compositor
+Exec=truss-session
+TryExec=truss-session
+Type=Application
+DesktopNames=truss
