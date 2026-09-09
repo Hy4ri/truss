@@ -43,4 +43,3 @@ stdenv.mkDerivation {
     mainProgram = "truss";
   };
 }
-renamed '/.hermes/cache/terminal/hermes-snap-b0b083422272.sh.tmp.GbA3S96IzG' -> '/.hermes/cache/terminal/hermes-snap-b0b083422272.sh'
