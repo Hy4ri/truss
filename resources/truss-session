@@ -44,10 +44,12 @@ cleanup() {
         systemctl --user unset-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || true
     fi
 }
-trap cleanup EXIT
+trap 'cleanup' EXIT
 truss --backend tty &
 pid=$!
 trap 'kill -TERM "$pid" 2>/dev/null || true' HUP INT TERM
 status=0
 wait "$pid" || status=$?
+cleanup
+trap - EXIT
 exit "$status"
