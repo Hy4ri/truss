@@ -17,8 +17,7 @@ assert enabled.hardware.graphics.enable;
 assert enabled.services.dbus.enable;
 assert enabled.security.polkit.enable;
 assert enabled.xdg.portal.enable;
-assert (lib.isList enabled.xdg.portal.config.truss.default && lib.elem "gtk" enabled.xdg.portal.config.truss.default)
-    || enabled.xdg.portal.config.truss.default == "gtk";
+assert enabled.xdg.portal.config.truss.default == "gtk";
 assert enabled.systemd.user.services.truss-polkit-agent.partOf == [ "truss-session.target" ];
 assert !lib.elem package disabled.services.displayManager.sessionPackages;
 assert !enabled.services.displayManager.sddm.enable;

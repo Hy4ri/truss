@@ -37,7 +37,7 @@ in {
     xdg.portal = {
       enable = lib.mkDefault true;
       extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-      config.truss.default = [ "gtk" ];
+      config.truss.default = lib.mkDefault "gtk";
     };
     xdg.mime.enable = lib.mkDefault true;
     fonts.enableDefaultPackages = lib.mkDefault true;
