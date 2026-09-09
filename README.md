@@ -2,6 +2,8 @@
 
 A minimal, efficient, keyboard-first dynamic tiling Wayland compositor built in Rust on Smithay 0.7 (from scratch — no wlroots).
 
+**Install:** [Release binaries, Nix flake and NixOS login-session setup](docs/install.md).
+
 ---
 
 ## Highlights
