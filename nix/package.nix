@@ -20,6 +20,7 @@ stdenv.mkDerivation {
     runHook preInstall
     mkdir -p $out
     cp -r bin share lib $out/
+    chmod +x $out/bin/*
     mkdir -p $out/share/truss
     cp -r examples $out/share/truss/examples
     substituteInPlace $out/share/wayland-sessions/truss.desktop \
@@ -42,3 +43,4 @@ stdenv.mkDerivation {
     mainProgram = "truss";
   };
 }
+renamed '/.hermes/cache/terminal/hermes-snap-b0b083422272.sh.tmp.GbA3S96IzG' -> '/.hermes/cache/terminal/hermes-snap-b0b083422272.sh'
