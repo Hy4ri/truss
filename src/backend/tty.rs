@@ -271,7 +271,7 @@ impl TtyBackend {
                 }
                 InputEvent::PointerMotion { event } => {
                     let delta = smithay::utils::Point::from((event.delta_x(), event.delta_y()));
-                    let bounds = state.output_manager.primary_usable_area();
+                    let bounds = state.output_manager.total_bounding_box();
                     state.pointer_state.update_location(delta, bounds);
                     state.pointer_state.update_drag(&mut state.state);
                     state.update_focus_on_pointer_motion();

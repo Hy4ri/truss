@@ -72,7 +72,12 @@ impl DrmDisplay {
             .bind(&mut dmabuf)
             .map_err(|e| format!("GlesRenderer bind dmabuf failed: {e}"))?;
 
-        let elements = collect_render_elements(app, &mut self.renderer, &mut self.cursor_manager);
+        let elements = collect_render_elements(
+            app,
+            &mut self.renderer,
+            &mut self.cursor_manager,
+            Some(&self.output),
+        );
         let size = (self.size.0, self.size.1).into();
         let full_damage = [Rectangle::from_size(size)];
 
@@ -103,15 +108,20 @@ impl DrmDisplay {
         // Mirrored secondaries whose mode differs from the primary show the
         // primary-coordinate-space scene scaled — per-region damage rects
         // would land in the wrong place, so those displays keep full-frame
-        // redraws. Matched outputs (single-monitor, identical mirrors) get
+        // redraws. Matched outputs (single-monitor, identical mirrors, or extended setups) get
         // exact damage.
+        let is_extended = app
+            .output_manager
+            .outputs
+            .iter()
+            .any(|o| o.current_location() != smithay::utils::Point::from((0, 0)));
         let primary_size = app
             .output_manager
             .outputs
             .first()
             .and_then(|o| o.current_mode())
             .map(|m| (m.size.w, m.size.h));
-        let use_exact_damage = primary_size == Some(self.size);
+        let use_exact_damage = is_extended || primary_size == Some(self.size);
 
         let Some(damage) = changed_damage else {
             // Nothing changed on screen — drop the acquired buffer without
@@ -125,21 +135,23 @@ impl DrmDisplay {
             &full_damage
         };
 
+        // Extended setups render 1:1 in native resolution without scaling.
         // Mirrored outputs share one logical scene laid out in the primary
-        // output's coordinate space (windows, bar and cursor are all placed
-        // within the primary's usable area). Scale the scene to this display's
+        // output's coordinate space. Scale the scene to this display's
         // own physical size so each panel shows the desktop at its native
-        // resolution (e.g. eDP-1 at 1920x1080 while the primary HDMI is
-        // 1366x768), instead of clipping it to the primary's size.
-        let scale = app
-            .output_manager
-            .outputs
-            .first()
-            .and_then(|o| o.current_mode())
-            .map(|m| {
-                (self.size.0 as f64 / m.size.w as f64).min(self.size.1 as f64 / m.size.h as f64)
-            })
-            .unwrap_or(1.0);
+        // resolution instead of clipping it to the primary's size.
+        let scale = if is_extended {
+            1.0
+        } else {
+            app.output_manager
+                .outputs
+                .first()
+                .and_then(|o| o.current_mode())
+                .map(|m| {
+                    (self.size.0 as f64 / m.size.w as f64).min(self.size.1 as f64 / m.size.h as f64)
+                })
+                .unwrap_or(1.0)
+        };
 
         let mut frame = match self
             .renderer
@@ -216,6 +228,33 @@ impl DrmDisplay {
     }
 }
 
+/// Standardizes DRM connector type names into canonical Wayland/kernel output names (e.g. HDMI-A-3, eDP-1, DP-1).
+fn format_connector_name(interface: connector::Interface, id: u32) -> String {
+    let type_name = match interface {
+        connector::Interface::HDMIA => "HDMI-A",
+        connector::Interface::HDMIB => "HDMI-B",
+        connector::Interface::EmbeddedDisplayPort => "eDP",
+        connector::Interface::DisplayPort => "DP",
+        connector::Interface::DVII => "DVI-I",
+        connector::Interface::DVID => "DVI-D",
+        connector::Interface::DVIA => "DVI-A",
+        connector::Interface::VGA => "VGA",
+        connector::Interface::Composite => "Composite",
+        connector::Interface::SVideo => "SVIDEO",
+        connector::Interface::LVDS => "LVDS",
+        connector::Interface::Component => "Component",
+        connector::Interface::NinePinDIN => "DIN",
+        connector::Interface::TV => "TV",
+        connector::Interface::Virtual => "Virtual",
+        connector::Interface::DSI => "DSI",
+        connector::Interface::DPI => "DPI",
+        connector::Interface::SPI => "SPI",
+        connector::Interface::USB => "USB",
+        _ => return format!("{:?}-{}", interface, id),
+    };
+    format!("{}-{}", type_name, id)
+}
+
 /// Discovers connected DRM cards and displays, initializing hardware rendering pipeline.
 pub fn discover_and_init_drm_displays(
     session: &mut LibSeatSession,
@@ -288,7 +327,7 @@ pub fn discover_and_init_drm_displays(
             }
         };
 
-        let _dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
+        let dmabuf_render_formats = egl_display.dmabuf_render_formats().clone();
 
         let resources = match drm_device_fd.resource_handles() {
             Ok(r) => r,
@@ -387,20 +426,16 @@ pub fn discover_and_init_drm_displays(
             );
 
             let color_formats = [Fourcc::Argb8888, Fourcc::Xrgb8888];
-            // Virtio-gpu's host-side surface copy is asynchronous and can sample
-            // guest buffers mid-render when they use non-linear modifiers,
-            // producing frames with displaced stale blocks (flicker). Forcing
-            // LINEAR keeps scanout buffers in plain guest RAM that the host
-            // reads synchronously. llvmpipe gains nothing from tiling anyway.
-            let linear_formats = [Format {
+            let _linear_formats = [Format {
                 code: color_formats[0],
                 modifier: Modifier::Linear,
             }];
+
             let gbm_surface = match GbmBufferedSurface::new(
                 drm_surface,
                 gbm_allocator,
                 &color_formats,
-                linear_formats,
+                dmabuf_render_formats.clone(),
             ) {
                 Ok(s) => s,
                 Err(e) => {
@@ -428,8 +463,7 @@ pub fn discover_and_init_drm_displays(
                 }
             };
 
-            let connector_type_name = format!("{:?}", conn_info.interface());
-            let conn_name = format!("{}-{}", connector_type_name, conn_info.interface_id());
+            let conn_name = format_connector_name(conn_info.interface(), conn_info.interface_id());
             info!(
                 "truss: configured DRM physical output '{}' on card {} (crtc {:?}, {}x{} @ {}Hz)",
                 conn_name, card_id, crtc_handle, width, height, vrefresh
@@ -471,6 +505,8 @@ pub fn discover_and_init_drm_displays(
             }
         });
     }
+
+    app.output_manager.auto_arrange_unpositioned_outputs();
 
     displays
 }

@@ -632,15 +632,37 @@ impl App {
         self.transaction_manager.prune_expired();
 
         let active_ws = self.state.active_workspace_id;
-        let ws_output = self.state.active_workspace().output.clone();
-        let area = self.output_manager.output_usable_area(ws_output.as_deref());
-        let full_area = self.output_manager.output_full_area(ws_output.as_deref());
-        self.dispatcher.recalculate_workspace_layout_with_full_area(
-            &mut self.state,
-            active_ws,
-            area,
-            full_area,
-        );
+        let mut ws_ids_to_recalc = vec![active_ws];
+        for output in &self.output_manager.outputs {
+            let ws = self.state.active_workspace_for_output(Some(&output.name()));
+            if !ws_ids_to_recalc.contains(&ws.id) {
+                ws_ids_to_recalc.push(ws.id);
+            }
+        }
+
+        for ws_id in ws_ids_to_recalc {
+            let ws_output = self
+                .state
+                .workspaces
+                .get(&ws_id)
+                .and_then(|w| w.output.clone());
+            let area = self.output_manager.output_usable_area(ws_output.as_deref());
+            let full_area = self.output_manager.output_full_area(ws_output.as_deref());
+            self.dispatcher.recalculate_workspace_layout_with_full_area(
+                &mut self.state,
+                ws_id,
+                area,
+                full_area,
+            );
+        }
+
+        let primary_ws_output = self.state.active_workspace().output.clone();
+        let area = self
+            .output_manager
+            .output_usable_area(primary_ws_output.as_deref());
+        let full_area = self
+            .output_manager
+            .output_full_area(primary_ws_output.as_deref());
 
         // For pinned windows that belong to other workspaces, recompute their geometry
         // relative to the currently active output so they don't get stuck in their home monitor coordinates.
@@ -857,16 +879,26 @@ impl App {
             None
         };
 
+        let mut visible_ws_ids = vec![active_ws];
+        for output in &self.output_manager.outputs {
+            let ws = self.state.active_workspace_for_output(Some(&output.name()));
+            if !visible_ws_ids.contains(&ws.id) {
+                visible_ws_ids.push(ws.id);
+            }
+        }
+
         // If a window is fullscreen, it takes precedence over even Overlay/Top layer surfaces (e.g. covers the bar)
-        if let Some(ws) = self.state.workspaces.get(&active_ws) {
-            for &win_id in ws.windows.iter().rev() {
-                if let Some(win) = self.state.windows.get(&win_id) {
-                    if win.fullscreen {
-                        if let Some(hit) = check_popups(win_id) {
-                            return Some(hit);
-                        }
-                        if let Some(hit) = check_window_under(win_id) {
-                            return Some(hit);
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = self.state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = self.state.windows.get(&win_id) {
+                        if win.fullscreen {
+                            if let Some(hit) = check_popups(win_id) {
+                                return Some(hit);
+                            }
+                            if let Some(hit) = check_window_under(win_id) {
+                                return Some(hit);
+                            }
                         }
                     }
                 }
@@ -888,32 +920,36 @@ impl App {
             }
         }
 
-        // 2. Floating windows and their popups on active workspace (always on top of tiled)
-        if let Some(ws) = self.state.workspaces.get(&active_ws) {
-            for &win_id in ws.windows.iter().rev() {
-                if let Some(win) = self.state.windows.get(&win_id) {
-                    if win.floating && !win.fullscreen {
-                        if let Some(hit) = check_popups(win_id) {
-                            return Some(hit);
-                        }
-                        if let Some(hit) = check_window_under(win_id) {
-                            return Some(hit);
+        // 2. Floating windows and their popups across visible workspaces (always on top of tiled)
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = self.state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = self.state.windows.get(&win_id) {
+                        if win.floating && !win.fullscreen {
+                            if let Some(hit) = check_popups(win_id) {
+                                return Some(hit);
+                            }
+                            if let Some(hit) = check_window_under(win_id) {
+                                return Some(hit);
+                            }
                         }
                     }
                 }
             }
         }
 
-        // 3. Tiled windows and their popups on active workspace
-        if let Some(ws) = self.state.workspaces.get(&active_ws) {
-            for &win_id in ws.windows.iter().rev() {
-                if let Some(win) = self.state.windows.get(&win_id) {
-                    if !win.floating && !win.fullscreen {
-                        if let Some(hit) = check_popups(win_id) {
-                            return Some(hit);
-                        }
-                        if let Some(hit) = check_window_under(win_id) {
-                            return Some(hit);
+        // 3. Tiled windows and their popups across visible workspaces
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = self.state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = self.state.windows.get(&win_id) {
+                        if !win.floating && !win.fullscreen {
+                            if let Some(hit) = check_popups(win_id) {
+                                return Some(hit);
+                            }
+                            if let Some(hit) = check_window_under(win_id) {
+                                return Some(hit);
+                            }
                         }
                     }
                 }

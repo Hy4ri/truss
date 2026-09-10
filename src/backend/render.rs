@@ -7,6 +7,7 @@ use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::layer_map_for_output;
 use smithay::input::pointer::CursorImageStatus;
+use smithay::output::Output;
 use smithay::render_elements;
 use smithay::wayland::shell::wlr_layer::Layer as WlrLayer;
 
@@ -29,20 +30,40 @@ pub fn collect_render_elements(
     app: &App,
     renderer: &mut GlesRenderer,
     cursor_manager: &mut CursorManager,
+    target_output: Option<&Output>,
 ) -> Vec<TrussRenderElement> {
     if !app.dpms_enabled {
         return Vec::new();
     }
 
+    let out_loc = target_output
+        .map(|o| o.current_location())
+        .unwrap_or_default();
     let mut elements = Vec::new();
 
     // 1. Cursor (top-most layer, rendered on top of everything)
     let pointer_loc = app.pointer_state.location;
-    let cursor_pos = (pointer_loc.x as i32, pointer_loc.y as i32);
+    let cursor_in_out = (
+        pointer_loc.x - out_loc.x as f64,
+        pointer_loc.y - out_loc.y as f64,
+    );
+    let out_size = target_output
+        .and_then(|o| o.current_mode())
+        .map(|m| (m.size.w, m.size.h));
+    let show_cursor = match out_size {
+        Some((w, h)) => {
+            cursor_in_out.0 >= 0.0
+                && cursor_in_out.0 < w as f64
+                && cursor_in_out.1 >= 0.0
+                && cursor_in_out.1 < h as f64
+        }
+        None => true,
+    };
+    let cursor_pos = (cursor_in_out.0 as i32, cursor_in_out.1 as i32);
 
     let zoom = app.zoom_factor.clamp(1.0, 5.0);
-    let center_x = pointer_loc.x;
-    let center_y = pointer_loc.y;
+    let center_x = pointer_loc.x - out_loc.x as f64;
+    let center_y = pointer_loc.y - out_loc.y as f64;
 
     let zoom_pt = move |x: i32, y: i32| -> (i32, i32) {
         if (zoom - 1.0).abs() < 1e-4 {
@@ -54,29 +75,36 @@ pub fn collect_render_elements(
         }
     };
 
-    match &app.cursor_status {
-        CursorImageStatus::Hidden => {
-            // No cursor to render
-        }
-        CursorImageStatus::Surface(wl_surface) => {
-            // Client-provided cursor surface (e.g. text cursor, resize handles)
-            let cursor_elements = render_elements_from_surface_tree(
-                renderer,
-                wl_surface,
-                cursor_pos,
-                1.0,
-                1.0,
-                Kind::Cursor,
-            );
-            elements.extend(cursor_elements.into_iter().map(TrussRenderElement::Surface));
-        }
-        CursorImageStatus::Named(_icon) => {
-            // Use xcursor theme cursor or fallback
-            if let Some(cursor_element) = cursor_manager.render_named_cursor(renderer, cursor_pos) {
-                elements.push(TrussRenderElement::Cursor(cursor_element));
+    if show_cursor {
+        match &app.cursor_status {
+            CursorImageStatus::Hidden => {
+                // No cursor to render
+            }
+            CursorImageStatus::Surface(wl_surface) => {
+                // Client-provided cursor surface (e.g. text cursor, resize handles)
+                let cursor_elements = render_elements_from_surface_tree(
+                    renderer,
+                    wl_surface,
+                    cursor_pos,
+                    1.0,
+                    1.0,
+                    Kind::Cursor,
+                );
+                elements.extend(cursor_elements.into_iter().map(TrussRenderElement::Surface));
+            }
+            CursorImageStatus::Named(_icon) => {
+                // Use xcursor theme cursor or fallback
+                if let Some(cursor_element) =
+                    cursor_manager.render_named_cursor(renderer, cursor_pos)
+                {
+                    elements.push(TrussRenderElement::Cursor(cursor_element));
+                }
             }
         }
     }
+
+    let out_name = target_output.map(|o| o.name());
+    let active_ws = app.state.active_workspace_for_output(out_name.as_deref());
 
     // Helper closure to render a window and its popups and borders
     let render_window_tree = |elements: &mut Vec<TrussRenderElement>,
@@ -98,7 +126,7 @@ pub fn collect_render_elements(
             app.opacity_config.inactive_opacity
         };
 
-        let (wx, wy) = zoom_pt(window.geometry.x, window.geometry.y);
+        let (wx, wy) = zoom_pt(window.geometry.x - out_loc.x, window.geometry.y - out_loc.y);
         let win_geom = (wx, wy);
 
         // Render associated popups first (above parent window)
@@ -106,8 +134,8 @@ pub fn collect_render_elements(
             smithay::desktop::PopupManager::popups_for_surface(surface.wl_surface())
         {
             let (px, py) = zoom_pt(
-                window.geometry.x + popup_loc.x,
-                window.geometry.y + popup_loc.y,
+                window.geometry.x - out_loc.x + popup_loc.x,
+                window.geometry.y - out_loc.y + popup_loc.y,
             );
             let popup_elements = render_elements_from_surface_tree(
                 renderer,
@@ -133,8 +161,7 @@ pub fn collect_render_elements(
         // Window borders for active and inactive windows (fullscreen windows omit borders)
         // If smart_borders is true and there is only 1 visible tiled window on this workspace, omit borders.
         let is_single_tiled = if app.border_config.smart_borders {
-            let ws = app.state.active_workspace();
-            let tiled_count = ws
+            let tiled_count = active_ws
                 .windows
                 .iter()
                 .filter(|&&id| {
@@ -210,8 +237,6 @@ pub fn collect_render_elements(
         }
     };
 
-    let active_ws = app.state.active_workspace();
-
     // Collect all windows to render on the active workspace (including pinned windows from other workspaces)
     let mut visible_window_ids = active_ws.windows.clone();
     for (&wid, win) in &app.state.windows {
@@ -246,6 +271,11 @@ pub fn collect_render_elements(
 
     // 3. Layer Shell Surfaces: Overlay & Top layers (e.g. Waybar, notifications, launchers)
     for output in &app.output_manager.outputs {
+        if let Some(target) = target_output {
+            if output != target {
+                continue;
+            }
+        }
         let layer_map = layer_map_for_output(output);
 
         for surface in layer_map
@@ -274,7 +304,9 @@ pub fn collect_render_elements(
                 .layers()
                 .any(|l| l.wl_surface() == wl_surf)
         });
-        if !already_rendered {
+        if !already_rendered
+            && (target_output.is_none() || target_output == app.output_manager.outputs.first())
+        {
             let layer_elements = render_elements_from_surface_tree(
                 renderer,
                 wl_surf,
@@ -303,7 +335,7 @@ pub fn collect_render_elements(
         if let Some(win) = app.state.windows.get(&window_id) {
             if !win.floating && !win.fullscreen {
                 if let Some(gid) = win.group_id {
-                    let is_active = Some(window_id) == app.state.active_workspace().focused_window;
+                    let is_active = Some(window_id) == active_ws.focused_window;
                     if is_active {
                         group_rendered.insert(gid);
                         render_window_tree(&mut elements, renderer, window_id);
@@ -319,8 +351,13 @@ pub fn collect_render_elements(
         }
     }
 
-    // 4. Layer Shell Surfaces: Bottom & Background layers
+    // 6. Layer Shell Surfaces: Bottom & Background layers
     for output in &app.output_manager.outputs {
+        if let Some(target) = target_output {
+            if output != target {
+                continue;
+            }
+        }
         let layer_map = layer_map_for_output(output);
 
         for surface in layer_map

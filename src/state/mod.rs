@@ -68,6 +68,35 @@ impl State {
             .expect("active workspace must exist")
     }
 
+    /// Returns the workspace that should be displayed on the given output name.
+    pub fn active_workspace_for_output(&self, output_name: Option<&str>) -> &Workspace {
+        let active = self.active_workspace();
+        if active.output.as_deref() == output_name
+            || (active.output.is_none() && output_name.is_none())
+        {
+            return active;
+        }
+
+        if let Some(name) = output_name {
+            if let Some(ws) = self
+                .workspaces
+                .values()
+                .find(|w| w.output.as_deref() == Some(name) && !w.windows.is_empty())
+            {
+                return ws;
+            }
+            if let Some(ws) = self
+                .workspaces
+                .values()
+                .find(|w| w.output.as_deref() == Some(name))
+            {
+                return ws;
+            }
+        }
+
+        active
+    }
+
     pub fn active_workspace_mut(&mut self) -> &mut Workspace {
         self.workspaces
             .get_mut(&self.active_workspace_id)
