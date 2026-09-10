@@ -62,10 +62,9 @@ impl PointerState {
         self.location = Point::from((new_x, new_y));
     }
 
-    /// Find which window contains the pointer position on the active workspace.
+    /// Find which window contains the pointer position across active/visible workspaces.
     /// Order: Fullscreen > Floating (top-most first) > Tiled (top-most first)
     pub fn find_target_at_location(&self, state: &State) -> PointerFocusTarget {
-        let ws = state.active_workspace();
         let px = self.location.x as i32;
         let py = self.location.y as i32;
 
@@ -80,34 +79,54 @@ impl PointerState {
             None
         };
 
+        // Determine all workspaces currently visible: active workspace plus any workspace displayed on other outputs
+        let mut visible_ws_ids = vec![state.active_workspace_id];
+        for ws in state.workspaces.values() {
+            if ws.output.is_some() && !visible_ws_ids.contains(&ws.id) {
+                visible_ws_ids.push(ws.id);
+            }
+        }
+
         // 1. Fullscreen window has highest priority
-        for &win_id in ws.windows.iter().rev() {
-            if let Some(win) = state.windows.get(&win_id) {
-                if win.fullscreen {
-                    if let Some(target) = check_window(win_id) {
-                        return target;
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = state.windows.get(&win_id) {
+                        if win.fullscreen {
+                            if let Some(target) = check_window(win_id) {
+                                return target;
+                            }
+                        }
                     }
                 }
             }
         }
 
         // 2. Floating windows have second priority (above tiled windows)
-        for &win_id in ws.windows.iter().rev() {
-            if let Some(win) = state.windows.get(&win_id) {
-                if win.floating && !win.fullscreen {
-                    if let Some(target) = check_window(win_id) {
-                        return target;
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = state.windows.get(&win_id) {
+                        if win.floating && !win.fullscreen {
+                            if let Some(target) = check_window(win_id) {
+                                return target;
+                            }
+                        }
                     }
                 }
             }
         }
 
         // 3. Tiled windows
-        for &win_id in ws.windows.iter().rev() {
-            if let Some(win) = state.windows.get(&win_id) {
-                if !win.floating && !win.fullscreen {
-                    if let Some(target) = check_window(win_id) {
-                        return target;
+        for &ws_id in &visible_ws_ids {
+            if let Some(ws) = state.workspaces.get(&ws_id) {
+                for &win_id in ws.windows.iter().rev() {
+                    if let Some(win) = state.windows.get(&win_id) {
+                        if !win.floating && !win.fullscreen {
+                            if let Some(target) = check_window(win_id) {
+                                return target;
+                            }
+                        }
                     }
                 }
             }

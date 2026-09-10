@@ -193,4 +193,53 @@ impl OutputManager {
     pub fn primary_usable_area(&self) -> Rect {
         self.output_usable_area(None)
     }
+
+    /// Returns the combined bounding box of all active outputs in global coordinate space.
+    pub fn total_bounding_box(&self) -> Rect {
+        if self.outputs.is_empty() {
+            return Rect::new(0, 0, 1920, 1080);
+        }
+        let mut min_x = i32::MAX;
+        let mut min_y = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut max_y = i32::MIN;
+
+        for output in &self.outputs {
+            let loc = output.current_location();
+            let (w, h) = output
+                .current_mode()
+                .map(|m| (m.size.w, m.size.h))
+                .unwrap_or((1920, 1080));
+            min_x = min_x.min(loc.x);
+            min_y = min_y.min(loc.y);
+            max_x = max_x.max(loc.x + w);
+            max_y = max_y.max(loc.y + h);
+        }
+
+        if min_x >= max_x || min_y >= max_y {
+            return Rect::new(0, 0, 1920, 1080);
+        }
+
+        Rect::new(min_x, min_y, (max_x - min_x) as u32, (max_y - min_y) as u32)
+    }
+
+    /// Automatically position any outputs that remain at (0,0) after the primary output.
+    pub fn auto_arrange_unpositioned_outputs(&mut self) {
+        if self.outputs.len() <= 1 {
+            return;
+        }
+        let mut next_x = 0;
+        for (i, output) in self.outputs.iter().enumerate() {
+            let loc = output.current_location();
+            let (w, _h) = output
+                .current_mode()
+                .map(|m| (m.size.w, m.size.h))
+                .unwrap_or((1920, 1080));
+            if i > 0 && loc == Point::from((0, 0)) && next_x > 0 {
+                output.change_current_state(None, None, None, Some(Point::from((next_x, 0))));
+            }
+            let updated_loc = output.current_location();
+            next_x = next_x.max(updated_loc.x + w);
+        }
+    }
 }

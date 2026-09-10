@@ -542,6 +542,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &app,
                         renderer,
                         &mut cursor_manager,
+                        None,
                     );
 
                     let render_damage: Option<Vec<Rectangle<i32, smithay::utils::Physical>>> =
