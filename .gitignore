@@ -1,3 +1,6 @@
 /target
 /flake.lock
 !Cargo.lock
+/.direnv
+__pycache__/
+*.pyc
